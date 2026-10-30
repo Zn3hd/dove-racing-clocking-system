@@ -25,3 +25,23 @@ This branch implements PostgreSQL-backed race management, authenticated chairman
 - Alembic migrations, schema versioning, and validated deployment configuration.
 
 Do not deploy this development API to the public internet yet.
+
+
+## Phase 4: provisional clocking endpoints
+- `POST /races/{race_id}/activate` — admin records actual release time and activates an open race.
+- `POST /clocking/qr/tokens` — admin issues a short-lived secret for a registered guest entry; revokes earlier matching tokens.
+- `POST /clocking/qr/scans` — authenticated guest submits their own entry and secret, with a UUID idempotency key.
+- `POST /clocking/rfid/simulate` — admin-only simulator uses registered device ID and active RFID UID.
+- `GET /clocking/events?race_id=...` — admin lists stored clocking evidence.
+- `POST /clocking/events/{event_id}/review` — admin records approval or rejection; approval remains pending and does not create an official result.
+
+Example guest scan JSON:
+```json
+{
+  "entry_id": "ENTRY_UUID",
+  "token": "ISSUED_SECRET",
+  "idempotency_key": "RANDOM_UUID"
+}
+```
+
+**Limitations:** No physical RFID protocol, device authentication, clock attestation, offline signature verification, rate limiting, official first-valid-arrival selection, result finalization, or live database integration verification yet. A static QR secret is copyable, so QR evidence is never automatically official. Reusing an idempotency key is supported only for the same entry/method; distinct requests still produce separate pending evidence. Human approvals are stored but not automatically promoted to valid clockings. Do not deploy publicly.
