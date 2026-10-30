@@ -60,7 +60,7 @@ def scenario(monkeypatch):
         db.execute(text("DELETE FROM device_gateway_messages WHERE device_id=:device"), {"device":device})
         db.execute(text("DELETE FROM device_gateway_credentials WHERE device_id=:device"), {"device":device})
         db.execute(text("""DELETE FROM clocking_reviews WHERE reviewed_by = ANY(:ids)"""), {"ids":ids})
-        db.execute(text("""DELETE FROM clocking_events WHERE submitted_by = ANY(:ids)"""), {"ids":ids})
+        db.execute(text("""DELETE FROM clocking_events WHERE submitted_by = ANY(:ids) OR device_id=:device"""), {"ids":ids,"device":device})
         db.execute(text("""DELETE FROM qr_tokens WHERE pigeon_id = ANY(:ids)"""),
                    {"ids":[pigeon_guest,pigeon_other,pigeon_member]})
         db.execute(text("""DELETE FROM race_entries WHERE pigeon_id = ANY(:ids)"""),
@@ -243,3 +243,39 @@ def test_official_guest_verification_requires_matching_ring_and_is_one_time(scen
     assert c.post(url,headers=admin,json=payload).status_code==409
     assert c.post(f"/races/{race}/close",headers=admin).status_code==200
     assert c.post(f"/races/{race}/finalize",headers=admin).status_code==409
+
+
+def test_esp32_gateway_auth_replay_and_untrusted_offline_clock(scenario):
+    s=scenario
+    c=s["client"]
+    admin=s["headers"](s["admin"])
+    race=make_race(s)
+    register(s,race,s["pigeon_member"],"RFID")
+    assert c.post(f"/races/{race}/activate",headers=admin).status_code==200
+    endpoint=f"/devices/{s['device']}/arrivals"
+    payload={"message_id":str(uuid4()),"race_id":race,
+             "ring_uid":f"RFID-{s['ring']}","offline_buffered":True,
+             "device_recorded_at":"2026-01-01T00:00:00Z"}
+    assert c.post(endpoint,json=payload).status_code==401
+    provision=c.post(f"/devices/{s['device']}/provision",headers=admin)
+    assert provision.status_code==200,provision.text
+    token=provision.json()["device_token"]
+    assert c.post(endpoint,headers={"X-Device-Token":"invalid"},json=payload).status_code==401
+    first=c.post(endpoint,headers={"X-Device-Token":token},json=payload)
+    assert first.status_code==202,first.text
+    assert first.json()["official_result_created"] is False
+    again=c.post(endpoint,headers={"X-Device-Token":token},json=payload)
+    assert again.status_code==202,again.text
+    assert again.json()["duplicate_request"] is True
+    assert again.json()["event_id"]==first.json()["event_id"]
+    assert c.post(endpoint,headers={"X-Device-Token":token},
+                  json={**payload,"ring_uid":"different"}).status_code==409
+    with s["engine"].connect() as db:
+        row=db.execute(text("SELECT recorded_at,metadata FROM clocking_events WHERE id=:id"),
+                       {"id":first.json()["event_id"]}).mappings().one()
+        assert row["recorded_at"].year != 2026 or row["recorded_at"].month != 1
+        assert row["metadata"]["timestamp_trusted"] is False
+    rotated=c.post(f"/devices/{s['device']}/provision",headers=admin)
+    assert rotated.status_code==200
+    assert c.post(endpoint,headers={"X-Device-Token":token},
+                  json={**payload,"message_id":str(uuid4())}).status_code==401
