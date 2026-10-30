@@ -5,16 +5,14 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..schemas import EntryCreate
-from ..security import require_dev_admin
+from ..auth import require_admin
 from ..calculations import distance_meters
-from .races import admin_id
 
-router = APIRouter(prefix="/races", tags=["entries"], dependencies=[Depends(require_dev_admin)])
+router = APIRouter(prefix="/races", tags=["entries"], )
 
 @router.post("/{race_id}/entries", status_code=201)
-def register_entry(race_id: UUID, payload: EntryCreate, db: Session = Depends(get_db)):
+def register_entry(race_id: UUID, payload: EntryCreate, db: Session = Depends(get_db), actor: dict = Depends(require_admin)):
     with db.begin():
-        actor = admin_id(db)
         race = db.execute(text("""SELECT release_latitude,release_longitude,status FROM races
             WHERE id=:id FOR UPDATE"""), {"id":race_id}).mappings().first()
         if not race: raise HTTPException(404,"Race not found")
@@ -52,8 +50,7 @@ def register_entry(race_id: UUID, payload: EntryCreate, db: Session = Depends(ge
             "distance_meters":round(dist,3),"expected_method":payload.expected_method}
 
 @router.get("/{race_id}/entries")
-def list_entries(race_id: UUID, db: Session = Depends(get_db)):
-    admin_id(db)
+def list_entries(race_id: UUID, db: Session = Depends(get_db), actor: dict = Depends(require_admin)):
     rows=db.execute(text("""SELECT id,race_id,pigeon_id,distance_meters,expected_method,status
         FROM race_entries WHERE race_id=:id ORDER BY registered_at LIMIT 1000"""), {"id":race_id})
     return [dict(r._mapping) for r in rows]
