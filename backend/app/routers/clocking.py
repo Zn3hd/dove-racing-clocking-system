@@ -117,7 +117,8 @@ def submit_qr_scan(payload: QRScanRequest, actor: dict = Depends(current_user),
             SELECT id,entry_id,method,status,submitted_by FROM clocking_events WHERE idempotency_key=:key
         """), {"key":str(payload.idempotency_key)}).mappings().first()
         if existing:
-            if (existing["entry_id"] != payload.entry_id or existing["method"] != "QR"\n                    or existing["submitted_by"] != actor["id"]):
+            if (existing["entry_id"] != payload.entry_id or existing["method"] != "QR"
+                    or existing["submitted_by"] != actor["id"]):
                 raise HTTPException(409, "Idempotency key already used")
             return {"event_id":existing["id"],"status":existing["status"],"duplicate_request":True}
         now = datetime.now(timezone.utc)
@@ -154,12 +155,13 @@ def simulate_rfid(payload: RFIDSimulatorRequest, actor: dict = Depends(require_a
         if not row:
             raise HTTPException(404, "No matching active device/ring/race entry")
         existing = db.execute(text("""
-            SELECT id,entry_id,method FROM clocking_events WHERE idempotency_key=:key
+            SELECT id,entry_id,method,status,submitted_by FROM clocking_events WHERE idempotency_key=:key
         """), {"key":str(payload.idempotency_key)}).mappings().first()
         if existing:
-            if (existing["entry_id"] != row["entry_id"] or existing["method"] != "RFID"\n                    or existing["submitted_by"] != actor["id"]):
+            if (existing["entry_id"] != row["entry_id"] or existing["method"] != "RFID"
+                    or existing["submitted_by"] != actor["id"]):
                 raise HTTPException(409, "Idempotency key already used")
-            return {"event_id":existing["id"],"status":"pending","duplicate_request":True}
+            return {"event_id":existing["id"],"status":existing["status"],"duplicate_request":True}
         now = datetime.now(timezone.utc)
         if now <= race["actual_release_at"]:
             raise HTTPException(409, "Race has not been released")
