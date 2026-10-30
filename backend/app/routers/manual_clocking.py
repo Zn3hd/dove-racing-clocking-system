@@ -59,14 +59,14 @@ def submit_manual_arrival(payload: ManualArrival,
             db.execute(text("""
                 UPDATE clocking_event_sources
                 SET channel=:channel,evidence_type='manual_claim',
-                    provenance='{"manual_adapter":true,"clock_integrity_verified":false}'::jsonb
+                    provenance=jsonb_build_object('manual_adapter', true, 'clock_integrity_verified', false)
                 WHERE event_id=:id
             """), {"id": result["event_id"], "channel": payload.channel})
         elif existing is None:
             db.execute(text("""
                 INSERT INTO clocking_event_sources(event_id,channel,evidence_type,provenance)
                 VALUES (:id,:channel,'manual_claim',
-                        '{"manual_adapter":true,"clock_integrity_verified":false}'::jsonb)
+                        jsonb_build_object('manual_adapter', true, 'clock_integrity_verified', false))
             """), {"id":result["event_id"],"channel":payload.channel})
     return {**result, "channel": payload.channel, "official_result_created": False,
             "note": "Manual arrival claim; requires in-person club verification"}
