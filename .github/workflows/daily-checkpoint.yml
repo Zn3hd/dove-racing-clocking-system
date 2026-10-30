@@ -1,0 +1,51 @@
+name: Daily development checkpoint
+
+on:
+  schedule:
+    # 23:00 Asia/Manila (UTC+8)
+    - cron: '0 15 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dove-daily-checkpoint
+  cancel-in-progress: false
+
+jobs:
+  checkpoint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Record daily progress only when new work exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          day=$(TZ=Asia/Manila date +%F)
+          file="docs/daily-progress.md"
+          mkdir -p docs
+          if [ -f "$file" ] && grep -Fq "## $day" "$file"; then
+            echo "Checkpoint already recorded for $day."
+            exit 0
+          fi
+          # Ignore automated checkpoint commits to prevent recursive reporting.
+          log=$(git log --since='24 hours ago' --format='%h %s' --no-merges -- . ':!docs/daily-progress.md' | head -40)
+          if [ -z "$log" ]; then
+            echo "No source/documentation changes to report."
+            exit 0
+          fi
+          {
+            printf '\n## %s (Asia/Manila)\n\n' "$day"
+            printf '%s\n' "$log" | sed 's/^/- /'
+          } >> "$file"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$file"
+          git commit -m "docs: daily development checkpoint $day"
+          git push origin HEAD:develop
