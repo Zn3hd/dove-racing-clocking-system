@@ -114,7 +114,12 @@ def submit_qr_scan(payload: QRScanRequest, actor: dict = Depends(current_user),
         if qr is None:
             raise HTTPException(401, "Invalid or expired clocking token")
         existing = db.execute(text("""
-            SELECT id,entry_id,method,status,submitted_by FROM clocking_events WHERE idempotency_key=:key
+            SELECT c.id,c.entry_id,c.method,c.submitted_by,
+                   CASE WHEN EXISTS (
+                     SELECT 1 FROM clocking_reviews cr
+                     WHERE cr.event_id=c.id AND cr.decision='reject'
+                   ) THEN 'invalid' ELSE c.status END AS status
+            FROM clocking_events c WHERE c.idempotency_key=:key
         """), {"key":str(payload.idempotency_key)}).mappings().first()
         if existing:
             if (existing["entry_id"] != payload.entry_id or existing["method"] != "QR"
@@ -155,7 +160,12 @@ def simulate_rfid(payload: RFIDSimulatorRequest, actor: dict = Depends(require_a
         if not row:
             raise HTTPException(404, "No matching active device/ring/race entry")
         existing = db.execute(text("""
-            SELECT id,entry_id,method,status,submitted_by FROM clocking_events WHERE idempotency_key=:key
+            SELECT c.id,c.entry_id,c.method,c.submitted_by,
+                   CASE WHEN EXISTS (
+                     SELECT 1 FROM clocking_reviews cr
+                     WHERE cr.event_id=c.id AND cr.decision='reject'
+                   ) THEN 'invalid' ELSE c.status END AS status
+            FROM clocking_events c WHERE c.idempotency_key=:key
         """), {"key":str(payload.idempotency_key)}).mappings().first()
         if existing:
             if (existing["entry_id"] != row["entry_id"] or existing["method"] != "RFID"
