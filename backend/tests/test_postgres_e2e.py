@@ -56,6 +56,7 @@ def scenario(monkeypatch):
     with engine.begin() as db:
         ids = [admin,guest,other,member]
         db.execute(text("DELETE FROM audit_logs WHERE actor_id = ANY(:ids)"), {"ids":ids})
+        db.execute(text("""DELETE FROM guest_arrival_verifications WHERE verified_by = ANY(:ids)"""), {"ids":ids})
         db.execute(text("""DELETE FROM clocking_reviews WHERE reviewed_by = ANY(:ids)"""), {"ids":ids})
         db.execute(text("""DELETE FROM clocking_events WHERE submitted_by = ANY(:ids)"""), {"ids":ids})
         db.execute(text("""DELETE FROM qr_tokens WHERE pigeon_id = ANY(:ids)"""),
@@ -212,3 +213,31 @@ def test_close_and_finalization_fail_closed(scenario):
         assert db.execute(text("SELECT status FROM races WHERE id=:id"),
                           {"id":race}).scalar_one()=="closed"
         assert db.execute(text("SELECT count(*) FROM race_results")).scalar_one()==0
+
+
+def test_official_guest_verification_requires_matching_ring_and_is_one_time(scenario):
+    s=scenario
+    c=s["client"]
+    admin=s["headers"](s["admin"])
+    race=make_race(s)
+    entry=register(s,race,s["pigeon_guest"],"QR")
+    issued=c.post("/clocking/qr/tokens",headers=admin,json={"entry_id":entry})
+    assert issued.status_code==201,issued.text
+    assert c.post(f"/races/{race}/activate",headers=admin).status_code==200
+    scan=c.post("/clocking/qr/scans",headers=s["headers"](s["guest"]),json={
+        "entry_id":entry,"token":issued.json()["token"],"idempotency_key":str(uuid4())
+    })
+    assert scan.status_code==202,scan.text
+    url=f"/clocking/events/{scan.json()['event_id']}/guest-verification"
+    payload={"decision":"confirmed","ring_number_seen":"WRONG",
+             "evidence_note":"Observed pigeon and ring in person at loft"}
+    assert c.post(url,headers=s["headers"](s["guest"]),json=payload).status_code==403
+    assert c.post(url,headers=admin,json=payload).status_code==422
+    payload["ring_number_seen"]=f"TEST-{s['pigeon_guest']}"
+    verified=c.post(url,headers=admin,json=payload)
+    assert verified.status_code==201,verified.text
+    assert verified.json()["ring_matched"] is True
+    assert verified.json()["official_result_created"] is False
+    assert c.post(url,headers=admin,json=payload).status_code==409
+    assert c.post(f"/races/{race}/close",headers=admin).status_code==200
+    assert c.post(f"/races/{race}/finalize",headers=admin).status_code==409
