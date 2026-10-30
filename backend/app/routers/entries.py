@@ -45,7 +45,7 @@ def register_entry(race_id: UUID, payload: EntryCreate, db: Session = Depends(ge
              "lat":pigeon["latitude"],"lon":pigeon["longitude"],"distance":round(dist,3),
              "method":payload.expected_method})
         db.execute(text("""INSERT INTO audit_logs(actor_id,action,entity_type,entity_id)
-            VALUES (:actor,'entry.registered','race_entry',:id)"""), {"actor":actor,"id":eid})
+            VALUES (:actor,'entry.registered','race_entry',:id)"""), {"actor":actor["id"],"id":eid})
     return {"id":eid,"race_id":race_id,"pigeon_id":payload.pigeon_id,
             "distance_meters":round(dist,3),"expected_method":payload.expected_method}
 
