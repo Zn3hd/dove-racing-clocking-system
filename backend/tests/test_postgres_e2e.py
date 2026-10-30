@@ -419,3 +419,39 @@ def test_messenger_signed_arrival_replay_and_provenance(scenario, monkeypatch):
     assert len(sources) == 1
     assert sources[0]["channel"] == "messenger"
     assert sources[0]["clock_integrity_verified"] is False
+
+
+def test_messenger_rejects_unlinked_sender_and_wrong_page(scenario, monkeypatch):
+    import hashlib
+    import hmac
+    import json
+    s = scenario
+    client = s["client"]
+    monkeypatch.setenv("META_APP_SECRET", "integration-secret-" + "y" * 40)
+    monkeypatch.setenv("META_PAGE_ID", "allowed-page")
+    race = make_race(s)
+    entry = register(s, race, s["pigeon_guest"], "QR")
+    issued = client.post("/clocking/qr/tokens",
+                         headers=s["headers"](s["admin"]), json={"entry_id": entry})
+    assert issued.status_code == 201
+    assert client.post(f"/races/{race}/activate",
+                       headers=s["headers"](s["admin"])).status_code == 200
+    for page in ("allowed-page", "wrong-page"):
+        message = {"object": "page", "entry": [{"id": page, "messaging": [{
+            "sender": {"id": "unlinked-psid"},
+            "message": {"mid": str(uuid4()),
+                        "text": "CLOCK " + str(entry) + " " + issued.json()["token"]}
+        }]}]}
+        raw = json.dumps(message).encode()
+        signature = "sha256=" + hmac.new(
+            ("integration-secret-" + "y" * 40).encode(), raw, hashlib.sha256
+        ).hexdigest()
+        response = client.post("/clocking/messenger/webhook", content=raw,
+                               headers={"X-Hub-Signature-256": signature})
+        assert response.status_code == 200, response.text
+        assert response.json()["processed"] == 0
+    with s["engine"].connect() as db:
+        count = db.execute(text("""
+            SELECT count(*) FROM clocking_events WHERE entry_id = :entry
+        """), {"entry": entry}).scalar_one()
+    assert count == 0
