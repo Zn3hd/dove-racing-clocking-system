@@ -43,3 +43,24 @@ def open_race(race_id: UUID, db: Session = Depends(get_db), actor: dict = Depend
         db.execute(text("""INSERT INTO audit_logs(actor_id,action,entity_type,entity_id)
             VALUES (:actor,'race.opened','race',:id)"""), {"actor":actor["id"],"id":race_id})
     return {"id":race_id,"status":"open"}
+
+
+@router.post("/{race_id}/activate")
+def activate_race(race_id: UUID, db: Session = Depends(get_db),
+                  actor: dict = Depends(require_admin)):
+    """Record actual release time on the server and begin provisional clocking."""
+    with db.begin():
+        race = db.execute(text("SELECT status FROM races WHERE id=:id FOR UPDATE"),
+                          {"id":race_id}).scalar_one_or_none()
+        if race is None:
+            raise HTTPException(404, "Race not found")
+        if race != "open":
+            raise HTTPException(409, "Only open races can be activated")
+        db.execute(text("""
+            UPDATE races SET status='active',actual_release_at=now() WHERE id=:id
+        """), {"id":race_id})
+        db.execute(text("""
+            INSERT INTO audit_logs(actor_id,action,entity_type,entity_id)
+            VALUES (:actor,'race.activated','race',:id)
+        """), {"actor":actor["id"],"id":race_id})
+    return {"id":race_id,"status":"active"}
