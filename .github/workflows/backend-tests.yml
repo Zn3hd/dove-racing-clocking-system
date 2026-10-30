@@ -50,6 +50,7 @@ jobs:
               conn.execute(Path("sql/003_finalization_guards.sql").read_text())
               conn.execute(Path("sql/004_guest_official_verification.sql").read_text())
               conn.execute(Path("sql/005_device_gateway.sql").read_text())
+              conn.execute(Path("sql/006_multichannel_clocking.sql").read_text())
           PY
       - name: Compile Python source (catch syntax errors)
         run: python -m compileall -q app tests
