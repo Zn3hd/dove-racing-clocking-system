@@ -4,6 +4,7 @@ CI provisions PostgreSQL and applies the actual schema before this suite.
 Tests use unique UUIDs and remove their own rows in FK-safe order.
 """
 import os
+from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 import pytest
@@ -68,6 +69,8 @@ def scenario(monkeypatch):
         db.execute(text("""DELETE FROM race_entries WHERE pigeon_id = ANY(:ids)"""),
                    {"ids":[pigeon_guest,pigeon_other,pigeon_member]})
         db.execute(text("DELETE FROM races WHERE created_by = :id"), {"id":admin})
+        db.execute(text("DELETE FROM club_memberships WHERE club_id IN (SELECT id FROM clubs WHERE created_by=:id)"), {"id":admin})
+        db.execute(text("DELETE FROM clubs WHERE created_by=:id"), {"id":admin})
         db.execute(text("DELETE FROM devices WHERE id=:id"), {"id":device})
         db.execute(text("DELETE FROM rfid_rings WHERE id=:id"), {"id":ring})
         db.execute(text("DELETE FROM pigeons WHERE id = ANY(:ids)"),
@@ -78,6 +81,58 @@ def scenario(monkeypatch):
     engine.dispose()
     database._engine = None
     database._factory = None
+
+def test_club_creation_membership_and_access(scenario):
+    s = scenario
+    client = s["client"]
+    admin = s["headers"](s["admin"])
+    guest = s["headers"](s["guest"])
+    assert client.get("/clubs").status_code == 401
+    assert client.get("/clubs", headers=guest).status_code == 403
+    assert client.post("/clubs", headers=admin, json={"name": "  "}).status_code == 422
+    created = client.post("/clubs", headers=admin, json={"name": "  Test Club  "})
+    assert created.status_code == 201, created.text
+    club = created.json()["id"]
+    assert created.json()["name"] == "Test Club"
+    assert client.post("/clubs", headers=admin, json={"name": "Second Club"}).status_code == 409
+    listed = client.get("/clubs", headers=admin)
+    assert listed.status_code == 200
+    assert [row["id"] for row in listed.json()] == [club]
+    path = f"/clubs/{club}/members"
+    initial = client.get(path, headers=admin)
+    assert initial.status_code == 200
+    assert [(row["id"], row["club_role"]) for row in initial.json()] == [(str(s["admin"]), "admin")]
+    for user, role in [(s["member"], "member"), (s["guest"], "guest")]:
+        payload = {"user_id": str(user)}
+        added = client.post(path, headers=admin, json=payload)
+        assert added.status_code == 201, added.text
+        assert added.json()["role"] == role
+        assert client.post(path, headers=admin, json=payload).status_code == 409
+    assert client.get(path, headers=guest).status_code == 403
+    assert client.post(path, headers=guest, json={"user_id": str(s["other"])}).status_code == 403
+    assert client.post(path, headers=admin, json={"user_id": str(uuid4())}).status_code == 422
+    assert client.post(path, headers=admin, json={"user_id": str(s["admin"])}).status_code == 422
+    def add_same_guest(_):
+        with TestClient(app) as concurrent_client:
+            return concurrent_client.post(path, headers=admin,
+                                          json={"user_id": str(s["other"])}).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(add_same_guest, range(2))) == [201, 409]
+    # Global administrator privileges alone do not grant another club's access.
+    with s["engine"].begin() as db:
+        db.execute(text("UPDATE users SET role_code='president' WHERE id=:id"), {"id": s["other"]})
+        db.execute(text("UPDATE users SET status='inactive' WHERE id=:id"), {"id": s["member"]})
+    outsider = s["headers"](s["other"])
+    assert client.get("/clubs", headers=outsider).json() == []
+    assert client.get(path, headers=outsider).status_code == 403
+    assert client.post(path, headers=outsider, json={"user_id": str(s["guest"])}).status_code == 403
+    assert client.post(path, headers=admin, json={"user_id": str(s["member"])}).status_code == 422
+    with s["engine"].connect() as db:
+        actions = db.execute(text("SELECT action FROM audit_logs WHERE actor_id=:id AND entity_type='club'"),
+                             {"id": s["admin"]}).scalars().all()
+    assert sorted(actions) == ["club.created"] + ["club.member_added"] * 3
+
 
 def make_race(s):
     c=s["client"]

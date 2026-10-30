@@ -73,15 +73,14 @@ def add_member(club_id: UUID, payload: ClubMemberAdd,
         ), {"id":payload.user_id}).scalar_one_or_none()
         if role not in ("member", "guest"):
             raise HTTPException(422, "User must be an active member or guest")
-        existing = db.execute(text(
-            "SELECT EXISTS(SELECT 1 FROM club_memberships WHERE club_id=:club AND user_id=:user)"
-        ), {"club":club_id,"user":payload.user_id}).scalar()
-        if existing:
-            raise HTTPException(409, "User is already in the club")
-        db.execute(text(
+        added = db.execute(text(
             """INSERT INTO club_memberships(club_id,user_id,club_role)
-               VALUES (:club,:user,:role)"""
-        ), {"club":club_id,"user":payload.user_id,"role":role})
+               VALUES (:club,:user,:role)
+               ON CONFLICT (club_id,user_id) DO NOTHING
+               RETURNING user_id"""
+        ), {"club":club_id,"user":payload.user_id,"role":role}).scalar_one_or_none()
+        if added is None:
+            raise HTTPException(409, "User is already in the club")
         db.execute(text(
             """INSERT INTO audit_logs(actor_id,action,entity_type,entity_id)
                VALUES (:actor,'club.member_added','club',:club)"""

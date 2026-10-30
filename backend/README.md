@@ -3,7 +3,7 @@
 This branch implements PostgreSQL-backed race management, authenticated chairman/president routes, and participant registration. It is **not production ready**; no RFID/QR official clocking endpoints are active.
 
 ## Local setup
-1. Create a dedicated PostgreSQL database and apply `sql/001_schema.sql`, then `sql/002_seed.sql`.
+1. Create a dedicated PostgreSQL database. After installing requirements and setting the environment below, run `python -m scripts.run_migrations` to apply migrations `001` through `008`. The runner requires a fresh database or its existing migration ledger; see `../docs/render-postgres-migrations.md` for existing databases.
 2. Set `DATABASE_URL` and a randomly generated `JWT_SECRET_KEY` (48+ characters) in your environment. Copy `.env.example` to local `.env` if useful; environment variables must be loaded into the process before running.
 3. Bootstrap the first chairman using environment variables `BOOTSTRAP_ADMIN_NAME`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` (12+ characters), then run from `backend/`: `python -m scripts.bootstrap_admin`. This script refuses to run if any administrator already exists. Unset bootstrap credentials afterward.
 4. Install requirements: `python -m pip install -r requirements.txt`
@@ -54,3 +54,14 @@ GitHub Actions now starts a disposable PostgreSQL 16 service, applies the actual
 To run locally, use a **dedicated disposable database**, apply both SQL scripts, set `DATABASE_URL` and `TEST_DATABASE_URL` to that database and a 48+ character `JWT_SECRET_KEY`, then run `python -m pytest -q`. Never point integration tests at production or a database containing real club records.
 
 Integration suite status must be verified in GitHub Actions; committed tests are not evidence of passing tests. Remaining scenarios include concurrency races, expired tokens, offline hardware, race finalization, and first-valid-arrival selection.
+
+## Single-club administration
+
+- `POST /clubs`: a chairman or president creates the single club and becomes its club administrator. Further creation requests return `409`.
+- `GET /clubs`: lists clubs where the caller has a club administrator membership.
+- `POST /clubs/{club_id}/members`: a club administrator adds an active member or guest using `{"user_id":"USER_UUID"}`. Duplicate additions, including concurrent requests, return `409`.
+- `GET /clubs/{club_id}/members`: lists club members for that club's administrators.
+
+All club routes require a chairman or president account. Club membership alone does not grant API administration rights. Successful creation and membership additions are audited. Existing races remain unchanged; club membership does not yet scope race access or registration. This is a club foundation, not completed tenant isolation.
+
+CI applies migration `008` and includes PostgreSQL tests for creation, membership, duplicate requests, concurrent additions, audit records, and access denial. Without `TEST_DATABASE_URL`, those integration tests are skipped. For database-free checks, set `DATABASE_URL` to a placeholder PostgreSQL URL (for example `postgresql+psycopg://test:test@127.0.0.1/dove_test`) and run `python -m pytest -q`; this does not verify database behavior.
