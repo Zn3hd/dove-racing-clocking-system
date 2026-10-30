@@ -17,6 +17,7 @@ from .routers.device_gateway import router as device_gateway_router
 from .routers.clocking_sources import router as clocking_sources_router
 from .routers.manual_clocking import router as manual_clocking_router
 from .routers.sms_clocking import router as sms_clocking_router
+from .routers.messenger_clocking import router as messenger_clocking_router
 
 app = FastAPI(title="Dove Racing Prototype API", version="0.2.0")
 
@@ -65,3 +66,4 @@ app.include_router(device_gateway_router)
 app.include_router(clocking_sources_router)
 app.include_router(manual_clocking_router)
 app.include_router(sms_clocking_router)
+app.include_router(messenger_clocking_router)
