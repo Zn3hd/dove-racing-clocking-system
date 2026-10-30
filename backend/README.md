@@ -1,35 +1,27 @@
-# Dove Racing Backend — Phase 3 development
+# Dove Racing Backend — authentication and participant management (development)
 
-FastAPI prototype with PostgreSQL-backed race creation, opening, listing, and pigeon registration. **Development only.** The endpoints require a temporary development administrator token and an existing active chairman/president database user. This is not production authentication.
+This branch implements PostgreSQL-backed race management, authenticated chairman/president routes, and participant registration. It is **not production ready**; no RFID/QR official clocking endpoints are active.
 
 ## Local setup
-1. Install PostgreSQL 14+ and create a dedicated development database/user.
-2. Apply `sql/001_schema.sql` then `sql/002_seed.sql` using psql. The migration is intended for a new empty database and has not been tested against a live instance.
-3. Create a chairman/president user with a securely hashed password in the database through an authorized bootstrap procedure (not yet provided). Set its UUID as `DEV_ADMIN_USER_ID`.
-4. Copy `.env.example` to `.env`, supply `DATABASE_URL`, `DEV_ADMIN_TOKEN` (32+ random characters), and `DEV_ADMIN_USER_ID`. Load those variables into your shell or use a trusted environment loader; FastAPI does not automatically read `.env`.
-5. Run:
-```bash
-cd backend
-python -m pip install -r requirements.txt
-python -m pytest -q
-uvicorn app.main:app --host 127.0.0.1 --reload
-```
+1. Create a dedicated PostgreSQL database and apply `sql/001_schema.sql`, then `sql/002_seed.sql`.
+2. Set `DATABASE_URL` and a randomly generated `JWT_SECRET_KEY` (48+ characters) in your environment. Copy `.env.example` to local `.env` if useful; environment variables must be loaded into the process before running.
+3. Bootstrap the first chairman using environment variables `BOOTSTRAP_ADMIN_NAME`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` (12+ characters), then run from `backend/`: `python -m scripts.bootstrap_admin`. This script refuses to run if any administrator already exists. Unset bootstrap credentials afterward.
+4. Install requirements: `python -m pip install -r requirements.txt`
+5. Start: `uvicorn app.main:app --host 127.0.0.1 --reload`
+6. Run tests: `python -m pytest -q`
 
-For protected development requests send `X-Dev-Admin-Token`. Do not expose this API to the public internet. When `APP_ENV` is not `development`, protected routes refuse requests.
+## API flow
+- `POST /auth/login` with email/password returns a 30-minute bearer JWT.
+- `GET /auth/me` returns the current account.
+- Admin bearer token required for `POST /participants`, `POST /lofts`, `POST /lofts/{id}/verify`, `POST /pigeons`, and all `/races` endpoints.
+- Accounts can be created only by an administrator. Loft coordinates require explicit administrator verification before pigeon registration.
+- For race registration, an RFID pigeon needs an active ring; QR entries must belong to a guest.
 
-## Endpoints
-- `GET /health` — prototype health
-- `POST /calculations/flight` — unverified calculation
-- `POST /races` — create draft race
-- `GET /races` — list races
-- `POST /races/{race_id}/open` — open a draft race
-- `POST /races/{race_id}/entries` — register eligible pigeon while race open
-- `GET /races/{race_id}/entries` — list race entries
+## Remaining security and reliability work
+- Integration tests with real PostgreSQL, including rollback and concurrent registration.
+- Login rate limiting, password reset, account lockout, secure HTTPS and token revocation.
+- Permissions scoped to each participant's own data; club/multi-club tenancy.
+- Stronger loft verification process, RFID ring assignment, QR token issuance and clocking review.
+- Alembic migrations, schema versioning, and validated deployment configuration.
 
-## Remaining
-- Live PostgreSQL integration tests, Alembic migrations and admin bootstrap
-- Real JWT/role authorization, registration/loft verification UI, secure QR and RFID ingestion
-- Entry category selection, transactional official result validation and finalization
-- Admin-only changes to release time with audit trail
-
-No official clocking endpoints are enabled.
+Do not deploy this development API to the public internet yet.
