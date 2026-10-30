@@ -356,3 +356,20 @@ def test_signed_sms_webhook_auth_sender_replay_and_provenance(scenario, monkeypa
     wrong_sig=hmac.new(secret.encode(),wrong_raw,hashlib.sha256).hexdigest()
     denied=c.post(url,content=wrong_raw,headers={"X-Dove-SMS-Signature":wrong_sig})
     assert denied.status_code==403,denied.text
+
+
+def test_messenger_verification_and_unsigned_rejection(scenario, monkeypatch):
+    s=scenario
+    c=s["client"]
+    monkeypatch.setenv("META_VERIFY_TOKEN","verification-test-value-"+"x"*40)
+    monkeypatch.setenv("META_APP_SECRET","application-test-value-"+"x"*40)
+    monkeypatch.setenv("META_PAGE_ID","test-page")
+    url="/clocking/messenger/webhook"
+    assert c.get(url,params={"hub.mode":"subscribe","hub.verify_token":"incorrect",
+                             "hub.challenge":"challenge"}).status_code==403
+    valid=c.get(url,params={"hub.mode":"subscribe",
+        "hub.verify_token":"verification-test-value-"+"x"*40,
+        "hub.challenge":"challenge"})
+    assert valid.status_code==200
+    assert valid.text=="challenge"
+    assert c.post(url,json={"object":"page","entry":[]}).status_code==401
