@@ -12,6 +12,7 @@ from .routers.participants import router as participants_router
 from .routers.clocking import router as clocking_router
 from .routers.results_preview import router as results_preview_router
 from .routers.finalization import router as finalization_router
+from .routers.guest_verification import router as guest_verification_router
 
 app = FastAPI(title="Dove Racing Prototype API", version="0.2.0")
 
@@ -55,3 +56,4 @@ app.include_router(participants_router)
 app.include_router(clocking_router)
 app.include_router(results_preview_router)
 app.include_router(finalization_router)
+app.include_router(guest_verification_router)
