@@ -48,6 +48,7 @@ async def sms_webhook(request: Request,
     except ValueError:
         raise HTTPException(422, "Invalid SMS payload") from None
 
+    fingerprint = hashlib.sha256(raw).hexdigest()
     # One phone number may be shared across users; refuse ambiguous matches.
     with db.begin():
         rows = db.execute(text("""
@@ -60,12 +61,12 @@ async def sms_webhook(request: Request,
             raise HTTPException(403, "SMS sender does not match an active guest entry")
         actor = dict(rows[0])
         existing = db.execute(text("""
-            SELECT s.event_id, c.entry_id FROM clocking_event_sources s
+            SELECT s.event_id, c.entry_id, s.provenance->>'payload_sha256' AS payload_sha256 FROM clocking_event_sources s
             JOIN clocking_events c ON c.id=s.event_id
             WHERE s.provider=:provider AND s.provider_message_id=:message
         """), {"provider":payload.provider,"message":payload.message_id}).mappings().first()
         if existing:
-            if existing["entry_id"] != payload.entry_id:
+            if existing["entry_id"] != payload.entry_id or existing["payload_sha256"] != fingerprint:
                 raise HTTPException(409, "Provider message ID already assigned")
             return {"event_id":existing["event_id"],"duplicate_request":True,
                     "status":"pending","official_result_created":False}
@@ -78,12 +79,14 @@ async def sms_webhook(request: Request,
                       idempotency_key=key), actor=actor, db=db)
     with db.begin():
         source = db.execute(text("""
-            SELECT channel,provider,provider_message_id
+            SELECT channel,provider,provider_message_id,
+                   provenance->>'payload_sha256' AS payload_sha256
             FROM clocking_event_sources WHERE event_id=:id FOR UPDATE
         """), {"id":result["event_id"]}).mappings().first()
         if source is not None:
             if (source["channel"] != "sms" or source["provider"] != payload.provider
-                    or source["provider_message_id"] != payload.message_id):
+                    or source["provider_message_id"] != payload.message_id
+                    or source["payload_sha256"] != fingerprint):
                 raise HTTPException(409, "Event already attributed to another source")
         else:
             db.execute(text("""
@@ -91,9 +94,10 @@ async def sms_webhook(request: Request,
                 (event_id,channel,evidence_type,provider,provider_message_id,provenance)
                 VALUES (:id,'sms','manual_claim',:provider,:message,
                         jsonb_build_object('gateway_signature_verified',true,
-                                           'clock_integrity_verified',false))
+                                           'clock_integrity_verified',false,
+                                           'payload_sha256',:fingerprint))
             """), {"id":result["event_id"],"provider":payload.provider,
-                   "message":payload.message_id})
+                   "message":payload.message_id,"fingerprint":fingerprint})
     return {"event_id":result["event_id"],"duplicate_request":result["duplicate_request"],
             "status":"pending","official_result_created":False,
             "note":"SMS arrival claim only; in-person verification required"}
