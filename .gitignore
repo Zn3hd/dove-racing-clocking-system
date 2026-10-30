@@ -1,0 +1,27 @@
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+secrets/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+
+# Node
+node_modules/
+dist/
+
+# Local databases and IDE
+*.sqlite3
+.idea/
+.vscode/
+.DS_Store
