@@ -57,6 +57,8 @@ def scenario(monkeypatch):
         ids = [admin,guest,other,member]
         db.execute(text("DELETE FROM audit_logs WHERE actor_id = ANY(:ids)"), {"ids":ids})
         db.execute(text("""DELETE FROM guest_arrival_verifications WHERE verified_by = ANY(:ids)"""), {"ids":ids})
+        db.execute(text("DELETE FROM device_gateway_messages WHERE device_id=:device"), {"device":device})
+        db.execute(text("DELETE FROM device_gateway_credentials WHERE device_id=:device"), {"device":device})
         db.execute(text("""DELETE FROM clocking_reviews WHERE reviewed_by = ANY(:ids)"""), {"ids":ids})
         db.execute(text("""DELETE FROM clocking_events WHERE submitted_by = ANY(:ids)"""), {"ids":ids})
         db.execute(text("""DELETE FROM qr_tokens WHERE pigeon_id = ANY(:ids)"""),
