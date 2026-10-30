@@ -1,14 +1,14 @@
-# Dove Racing Backend
+# Dove Racing Backend — development prototype
 
-Prototype source import is underway. The pure calculation engine and unit tests are included here. The complete FastAPI API and database SQL from the earlier prototype have **not yet been pushed**.
+Implemented: GPS Haversine distance, flight speed, unit conversion, leaderboard grouping, and FastAPI `/health` and `/calculations/flight` endpoints. **The earlier full race-management API and 18-table PostgreSQL draft have not yet been imported into this repository.** No official RFID/QR clocking is enabled.
 
-Run calculation tests from `backend/`:
+## Run locally
 
 ```bash
-pip install -r requirements.txt
-python -m pytest tests/test_calculations.py -q
+cd backend
+python -m pip install -r requirements.txt
+uvicorn app.main:app --reload
+python -m pytest -q
 ```
 
-Use `.env.example` as a template for local configuration; do not commit `.env`.
-
-Security note: QR clocking must not be activated without authenticated guests, anti-replay controls and review. RFID simulator events must not be treated as verified official arrivals.
+Use `.env.example` to create a local `.env`; never commit real credentials. Production work remaining: PostgreSQL migrations, role-based authentication, secure QR submissions, RFID ingestion, review workflows, immutable results, and integration tests.
