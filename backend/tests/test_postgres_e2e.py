@@ -311,3 +311,47 @@ def test_web_mobile_arrival_provenance_and_replay(scenario):
     assert source.json()["clock_integrity_verified"] is False
     assert c.get(f"/clocking/events/{first.json()['event_id']}/source",
                  headers=s["headers"](s["guest"])).status_code==403
+
+
+def test_signed_sms_webhook_auth_sender_replay_and_provenance(scenario, monkeypatch):
+    import hashlib
+    import hmac
+    import json
+    s=scenario
+    c=s["client"]
+    admin=s["headers"](s["admin"])
+    race=make_race(s)
+    entry=register(s,race,s["pigeon_guest"],"QR")
+    issued=c.post("/clocking/qr/tokens",headers=admin,json={"entry_id":entry})
+    assert issued.status_code==201,issued.text
+    assert c.post(f"/races/{race}/activate",headers=admin).status_code==200
+    sender="+639171234567"
+    with s["engine"].begin() as db:
+        db.execute(text("UPDATE users SET phone=:phone WHERE id=:id"),
+                   {"phone":sender,"id":s["guest"]})
+    secret="sms-integration-test-secret-"+"x"*48
+    monkeypatch.setenv("SMS_WEBHOOK_SECRET",secret)
+    payload={"provider":"testgateway","message_id":str(uuid4()),
+             "sender":sender,"entry_id":entry,"token":issued.json()["token"]}
+    raw=json.dumps(payload,separators=(",",":")).encode()
+    sig=hmac.new(secret.encode(),raw,hashlib.sha256).hexdigest()
+    url="/clocking/sms/webhook"
+    assert c.post(url,content=raw,headers={"Content-Type":"application/json"}).status_code==401
+    assert c.post(url,content=raw,headers={"X-Dove-SMS-Signature":"bad"}).status_code==401
+    first=c.post(url,content=raw,headers={"X-Dove-SMS-Signature":sig,
+                                          "Content-Type":"application/json"})
+    assert first.status_code==202,first.text
+    assert first.json()["official_result_created"] is False
+    repeated=c.post(url,content=raw,headers={"X-Dove-SMS-Signature":sig})
+    assert repeated.status_code==202,repeated.text
+    assert repeated.json()["duplicate_request"] is True
+    assert repeated.json()["event_id"]==first.json()["event_id"]
+    source=c.get(f"/clocking/events/{first.json()['event_id']}/source",headers=admin)
+    assert source.status_code==200,source.text
+    assert source.json()["channel"]=="sms"
+    assert source.json()["clock_integrity_verified"] is False
+    wrong={**payload,"sender":"+639170000000","message_id":str(uuid4())}
+    wrong_raw=json.dumps(wrong).encode()
+    wrong_sig=hmac.new(secret.encode(),wrong_raw,hashlib.sha256).hexdigest()
+    denied=c.post(url,content=wrong_raw,headers={"X-Dove-SMS-Signature":wrong_sig})
+    assert denied.status_code==403,denied.text
