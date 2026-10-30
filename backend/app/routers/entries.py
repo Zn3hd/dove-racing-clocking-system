@@ -13,8 +13,8 @@ router = APIRouter(prefix="/races", tags=["entries"], dependencies=[Depends(requ
 
 @router.post("/{race_id}/entries", status_code=201)
 def register_entry(race_id: UUID, payload: EntryCreate, db: Session = Depends(get_db)):
-    actor = admin_id(db)
     with db.begin():
+        actor = admin_id(db)
         race = db.execute(text("""SELECT release_latitude,release_longitude,status FROM races
             WHERE id=:id FOR UPDATE"""), {"id":race_id}).mappings().first()
         if not race: raise HTTPException(404,"Race not found")
