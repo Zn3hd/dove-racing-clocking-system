@@ -5,10 +5,29 @@ on:
     branches: [develop, main]
   pull_request:
     branches: [main, develop]
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dove_test
+          POSTGRES_PASSWORD: local_ci_only
+          POSTGRES_DB: dove_racing_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dove_test -d dove_racing_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      DATABASE_URL: postgresql+psycopg://dove_test:local_ci_only@localhost:5432/dove_racing_test
+      TEST_DATABASE_URL: postgresql+psycopg://dove_test:local_ci_only@localhost:5432/dove_racing_test
+      JWT_SECRET_KEY: ci-only-test-secret-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
     defaults:
       run:
         working-directory: backend
@@ -19,5 +38,15 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
-      - name: Run backend tests
+      - name: Apply real PostgreSQL schema and seed
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import psycopg
+          with psycopg.connect(os.environ["DATABASE_URL"].replace("postgresql+psycopg://","postgresql://")) as conn:
+              conn.execute(Path("sql/001_schema.sql").read_text())
+              conn.execute(Path("sql/002_seed.sql").read_text())
+          PY
+      - name: Run unit, API, and PostgreSQL integration tests
         run: python -m pytest -q
