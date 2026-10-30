@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from .calculations import distance_meters, speed_mpm, convert_speed
 
+from .routers.clubs import router as clubs_router
 from .routers.races import router as races_router
 from .routers.entries import router as entries_router
 from .routers.auth import router as auth_router
@@ -55,6 +56,7 @@ def calculate_flight(payload: FlightCalculation):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+app.include_router(clubs_router)
 app.include_router(races_router)
 app.include_router(entries_router)
 app.include_router(auth_router)
