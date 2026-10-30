@@ -60,6 +60,7 @@ def scenario(monkeypatch):
         db.execute(text("DELETE FROM device_gateway_messages WHERE device_id=:device"), {"device":device})
         db.execute(text("DELETE FROM device_gateway_credentials WHERE device_id=:device"), {"device":device})
         db.execute(text("""DELETE FROM clocking_reviews WHERE reviewed_by = ANY(:ids)"""), {"ids":ids})
+        db.execute(text("""DELETE FROM clocking_event_sources WHERE event_id IN (SELECT id FROM clocking_events WHERE submitted_by = ANY(:ids) OR device_id=:device)"""), {"ids":ids,"device":device})
         db.execute(text("""DELETE FROM clocking_events WHERE submitted_by = ANY(:ids) OR device_id=:device"""), {"ids":ids,"device":device})
         db.execute(text("""DELETE FROM qr_tokens WHERE pigeon_id = ANY(:ids)"""),
                    {"ids":[pigeon_guest,pigeon_other,pigeon_member]})
@@ -279,3 +280,34 @@ def test_esp32_gateway_auth_replay_and_untrusted_offline_clock(scenario):
     assert rotated.status_code==200
     assert c.post(endpoint,headers={"X-Device-Token":token},
                   json={**payload,"message_id":str(uuid4())}).status_code==401
+
+
+def test_web_mobile_arrival_provenance_and_replay(scenario):
+    s=scenario
+    c=s["client"]
+    admin=s["headers"](s["admin"])
+    race=make_race(s)
+    entry=register(s,race,s["pigeon_guest"],"QR")
+    issued=c.post("/clocking/qr/tokens",headers=admin,json={"entry_id":entry})
+    assert issued.status_code==201,issued.text
+    assert c.post(f"/races/{race}/activate",headers=admin).status_code==200
+    payload={"entry_id":entry,"token":issued.json()["token"],
+             "idempotency_key":str(uuid4()),"channel":"web"}
+    url="/clocking/manual/arrivals"
+    assert c.post(url,json=payload).status_code==401
+    assert c.post(url,headers=s["headers"](s["other"]),json=payload).status_code==403
+    first=c.post(url,headers=s["headers"](s["guest"]),json=payload)
+    assert first.status_code==202,first.text
+    assert first.json()["official_result_created"] is False
+    repeated=c.post(url,headers=s["headers"](s["guest"]),json=payload)
+    assert repeated.status_code==202,repeated.text
+    assert repeated.json()["duplicate_request"] is True
+    assert repeated.json()["event_id"]==first.json()["event_id"]
+    changed=c.post(url,headers=s["headers"](s["guest"]),json={**payload,"channel":"mobile"})
+    assert changed.status_code==409,changed.text
+    source=c.get(f"/clocking/events/{first.json()['event_id']}/source",headers=admin)
+    assert source.status_code==200,source.text
+    assert source.json()["channel"]=="web"
+    assert source.json()["clock_integrity_verified"] is False
+    assert c.get(f"/clocking/events/{first.json()['event_id']}/source",
+                 headers=s["headers"](s["guest"])).status_code==403
