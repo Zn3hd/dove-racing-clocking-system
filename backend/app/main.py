@@ -5,6 +5,9 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from .calculations import distance_meters, speed_mpm, convert_speed
 
+from .routers.races import router as races_router
+from .routers.entries import router as entries_router
+
 app = FastAPI(title="Dove Racing Prototype API", version="0.2.0")
 
 class FlightCalculation(BaseModel):
@@ -38,3 +41,7 @@ def calculate_flight(payload: FlightCalculation):
         }
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+app.include_router(races_router)
+app.include_router(entries_router)
