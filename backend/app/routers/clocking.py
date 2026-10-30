@@ -169,7 +169,7 @@ def simulate_rfid(payload: RFIDSimulatorRequest, actor: dict = Depends(require_a
             VALUES (:id,:entry,'RFID',:device,:actor,:key,:recorded,'pending',
                     CAST(:metadata AS jsonb))
         """), {"id":event_id,"entry":row["entry_id"],"device":payload.device_id,
-                "actor":actor["id"],"key":str(payload.idempotency_key),"recorded":now})
+                "actor":actor["id"],"key":str(payload.idempotency_key),"recorded":now,\n                "metadata":'{"simulated":true}'})
     return {"event_id":event_id,"status":"pending","duplicate_request":False,
             "note":"Simulator event only; not trusted hardware evidence"}
 
