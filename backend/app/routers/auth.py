@@ -1,9 +1,9 @@
 """Login for existing accounts. Public self-registration is intentionally disabled."""
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from ..auth import current_user, issue_token, verify_password
+from ..auth import current_user, issue_token, verify_password, hash_password
 from ..database import get_db
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -25,3 +25,33 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 def me(user: dict = Depends(current_user)):
     return {"id": user["id"], "role": user["role_code"],
             "full_name": user["full_name"], "email": user["email"]}
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=12, max_length=256)
+
+@router.post("/change-password")
+def change_password(
+    payload: ChangePasswordRequest,
+    user: dict = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    """Change the signed-in user's password after verifying the current password."""
+    # Lock the account row so concurrent changes cannot overwrite one another.
+    row = db.execute(
+        text("SELECT password_hash FROM users WHERE id=:id AND status='active' FOR UPDATE"),
+        {"id": user["id"]},
+    ).mappings().first()
+    if not row or not verify_password(payload.current_password, row["password_hash"]):
+        db.rollback()
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    if payload.current_password == payload.new_password:
+        db.rollback()
+        raise HTTPException(status_code=422, detail="New password must differ from current password")
+    db.execute(
+        text("UPDATE users SET password_hash=:password_hash WHERE id=:id"),
+        {"password_hash": hash_password(payload.new_password), "id": user["id"]},
+    )
+    db.commit()
+    return {"message": "Password changed successfully"}
