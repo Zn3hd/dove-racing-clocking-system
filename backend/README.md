@@ -45,3 +45,12 @@ Example guest scan JSON:
 ```
 
 **Limitations:** No physical RFID protocol, device authentication, clock attestation, offline signature verification, rate limiting, official first-valid-arrival selection, result finalization, or live database integration verification yet. A static QR secret is copyable, so QR evidence is never automatically official. Reusing an idempotency key is supported only for the same entry/method; distinct requests still produce separate pending evidence. Human approvals are stored but not automatically promoted to valid clockings. Do not deploy publicly.
+
+
+## PostgreSQL end-to-end integration tests
+
+GitHub Actions now starts a disposable PostgreSQL 16 service, applies the actual `sql/001_schema.sql` and `sql/002_seed.sql` files, and runs the full pytest suite. `tests/test_postgres_e2e.py` exercises real API requests and persistent data for race creation, opening, registration, activation, guest ownership, QR token rotation, idempotency, RFID simulation, and review rejection. The CI database uses **test-only credentials** and is destroyed after the job.
+
+To run locally, use a **dedicated disposable database**, apply both SQL scripts, set `DATABASE_URL` and `TEST_DATABASE_URL` to that database and a 48+ character `JWT_SECRET_KEY`, then run `python -m pytest -q`. Never point integration tests at production or a database containing real club records.
+
+Integration suite status must be verified in GitHub Actions; committed tests are not evidence of passing tests. Remaining scenarios include concurrency races, expired tokens, offline hardware, race finalization, and first-valid-arrival selection.
