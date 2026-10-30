@@ -35,7 +35,6 @@ def list_races(db: Session = Depends(get_db), actor: dict = Depends(require_admi
 @router.post("/{race_id}/open")
 def open_race(race_id: UUID, db: Session = Depends(get_db), actor: dict = Depends(require_admin)):
     with db.begin():
-        actor = admin_id(db)
         row = db.execute(text("SELECT status FROM races WHERE id=:id FOR UPDATE"), {"id":race_id}).scalar_one_or_none()
         if row is None: raise HTTPException(404,"Race not found")
         if row != "draft": raise HTTPException(409,"Only draft races can be opened")
