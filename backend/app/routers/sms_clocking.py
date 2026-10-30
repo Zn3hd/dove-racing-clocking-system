@@ -95,7 +95,7 @@ async def sms_webhook(request: Request,
                 VALUES (:id,'sms','manual_claim',:provider,:message,
                         jsonb_build_object('gateway_signature_verified',true,
                                            'clock_integrity_verified',false,
-                                           'payload_sha256',:fingerprint))
+                                           'payload_sha256',CAST(:fingerprint AS text)))
             """), {"id":result["event_id"],"provider":payload.provider,
                    "message":payload.message_id,"fingerprint":fingerprint})
     return {"event_id":result["event_id"],"duplicate_request":result["duplicate_request"],
