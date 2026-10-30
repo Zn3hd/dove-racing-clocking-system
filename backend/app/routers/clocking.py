@@ -114,12 +114,12 @@ def submit_qr_scan(payload: QRScanRequest, actor: dict = Depends(current_user),
         if qr is None:
             raise HTTPException(401, "Invalid or expired clocking token")
         existing = db.execute(text("""
-            SELECT id,entry_id,method FROM clocking_events WHERE idempotency_key=:key
+            SELECT id,entry_id,method,status,submitted_by FROM clocking_events WHERE idempotency_key=:key
         """), {"key":str(payload.idempotency_key)}).mappings().first()
         if existing:
-            if existing["entry_id"] != payload.entry_id or existing["method"] != "QR":
+            if (existing["entry_id"] != payload.entry_id or existing["method"] != "QR"\n                    or existing["submitted_by"] != actor["id"]):
                 raise HTTPException(409, "Idempotency key already used")
-            return {"event_id":existing["id"],"status":"pending","duplicate_request":True}
+            return {"event_id":existing["id"],"status":existing["status"],"duplicate_request":True}
         now = datetime.now(timezone.utc)
         if now <= entry["actual_release_at"]:
             raise HTTPException(409, "Race has not been released")
@@ -128,7 +128,7 @@ def submit_qr_scan(payload: QRScanRequest, actor: dict = Depends(current_user),
                 idempotency_key,recorded_at,status)
             VALUES (:id,:entry,'QR',:qr,:actor,:key,:recorded,'pending')
         """), {"id":event_id,"entry":payload.entry_id,"qr":qr,"actor":actor["id"],
-                "key":str(payload.idempotency_key),"recorded":now})
+                "key":str(payload.idempotency_key),"recorded":now,"metadata":'{"simulated":true}'})
     return {"event_id":event_id,"status":"pending","duplicate_request":False,
             "note":"Submission requires admin review; not an official arrival"}
 
@@ -157,7 +157,7 @@ def simulate_rfid(payload: RFIDSimulatorRequest, actor: dict = Depends(require_a
             SELECT id,entry_id,method FROM clocking_events WHERE idempotency_key=:key
         """), {"key":str(payload.idempotency_key)}).mappings().first()
         if existing:
-            if existing["entry_id"] != row["entry_id"] or existing["method"] != "RFID":
+            if (existing["entry_id"] != row["entry_id"] or existing["method"] != "RFID"\n                    or existing["submitted_by"] != actor["id"]):
                 raise HTTPException(409, "Idempotency key already used")
             return {"event_id":existing["id"],"status":"pending","duplicate_request":True}
         now = datetime.now(timezone.utc)
@@ -167,7 +167,7 @@ def simulate_rfid(payload: RFIDSimulatorRequest, actor: dict = Depends(require_a
             INSERT INTO clocking_events(id,entry_id,method,device_id,submitted_by,
                 idempotency_key,recorded_at,status,metadata)
             VALUES (:id,:entry,'RFID',:device,:actor,:key,:recorded,'pending',
-                    '{"simulated":true}'::jsonb)
+                    CAST(:metadata AS jsonb))
         """), {"id":event_id,"entry":row["entry_id"],"device":payload.device_id,
                 "actor":actor["id"],"key":str(payload.idempotency_key),"recorded":now})
     return {"event_id":event_id,"status":"pending","duplicate_request":False,
