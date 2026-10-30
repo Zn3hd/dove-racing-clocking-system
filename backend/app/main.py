@@ -8,6 +8,7 @@ from .calculations import distance_meters, speed_mpm, convert_speed
 from .routers.races import router as races_router
 from .routers.entries import router as entries_router
 from .routers.auth import router as auth_router
+from .routers.first_admin import router as first_admin_router
 from .routers.participants import router as participants_router
 from .routers.clocking import router as clocking_router
 from .routers.results_preview import router as results_preview_router
@@ -57,6 +58,7 @@ def calculate_flight(payload: FlightCalculation):
 app.include_router(races_router)
 app.include_router(entries_router)
 app.include_router(auth_router)
+app.include_router(first_admin_router)
 app.include_router(participants_router)
 app.include_router(clocking_router)
 app.include_router(results_preview_router)
