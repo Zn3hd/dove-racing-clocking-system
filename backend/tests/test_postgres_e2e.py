@@ -134,6 +134,9 @@ def test_qr_ownership_replay_revocation_and_review(scenario):
         headers=admin,json={"decision":"reject","reason":"Unverifiable guest submission"})
     assert review.status_code==200,review.text
     assert review.json()["event_status"]=="invalid"
+    replay_after_rejection=c.post("/clocking/qr/scans",headers=s["headers"](s["guest"]),json=payload)
+    assert replay_after_rejection.status_code==202,replay_after_rejection.text
+    assert replay_after_rejection.json()["status"]=="invalid"
     repeated=c.post(f"/clocking/events/{first.json()['event_id']}/review",
         headers=admin,json={"decision":"approve","reason":"Second review attempt"})
     assert repeated.status_code==409
