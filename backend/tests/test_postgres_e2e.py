@@ -190,3 +190,25 @@ def test_approved_guest_arrival_appears_in_provisional_leaderboard(scenario):
     assert preview.json()["entries"][0]["entry_id"]==entry
     assert preview.json()["entries"][0]["clocking_method"]=="QR"
     assert preview.json()["entries"][0]["verification_status"]=="provisional"
+
+
+def test_close_and_finalization_fail_closed(scenario):
+    s=scenario
+    client=s["client"]
+    admin=s["headers"](s["admin"])
+    race=make_race(s)
+    # No race may be finalized while registration remains open.
+    premature=client.post(f"/races/{race}/finalize",headers=admin)
+    assert premature.status_code==409
+    assert client.post(f"/races/{race}/activate",headers=admin).status_code==200
+    closed=client.post(f"/races/{race}/close",headers=admin)
+    assert closed.status_code==200,closed.text
+    assert closed.json()["official"] is False
+    assert client.post(f"/races/{race}/close",headers=admin).status_code==409
+    blocked=client.post(f"/races/{race}/finalize",headers=admin)
+    assert blocked.status_code==409
+    assert "disabled" in blocked.json()["detail"]
+    with s["engine"].connect() as db:
+        assert db.execute(text("SELECT status FROM races WHERE id=:id"),
+                          {"id":race}).scalar_one()=="closed"
+        assert db.execute(text("SELECT count(*) FROM race_results")).scalar_one()==0
