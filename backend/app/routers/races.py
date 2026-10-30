@@ -22,9 +22,9 @@ def admin_id(db: Session) -> UUID:
 
 @router.post("", status_code=201)
 def create_race(payload: RaceCreate, db: Session = Depends(get_db)):
-    actor = admin_id(db)
     rid = uuid4()
     with db.begin():
+        actor = admin_id(db)
         db.execute(text("""
             INSERT INTO races(id,name,release_latitude,release_longitude,scheduled_release_at,
               minimum_speed_mpm,display_speed_unit,guest_ranking_mode,status,created_by)
@@ -47,8 +47,8 @@ def list_races(db: Session = Depends(get_db)):
 
 @router.post("/{race_id}/open")
 def open_race(race_id: UUID, db: Session = Depends(get_db)):
-    actor = admin_id(db)
     with db.begin():
+        actor = admin_id(db)
         row = db.execute(text("SELECT status FROM races WHERE id=:id FOR UPDATE"), {"id":race_id}).scalar_one_or_none()
         if row is None: raise HTTPException(404,"Race not found")
         if row != "draft": raise HTTPException(409,"Only draft races can be opened")
