@@ -49,7 +49,9 @@ def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(bear
                      {"id": user_id}).mappings().first()
     if not row or row["status"] != "active":
         raise HTTPException(401, "Account inactive or unavailable")
-    return dict(row)
+    result = dict(row)
+    db.rollback()  # close read-only implicit transaction before write endpoints begin
+    return result
 
 def require_admin(user: dict = Depends(current_user)) -> dict:
     if user["role_code"] not in ("chairman", "president"):
