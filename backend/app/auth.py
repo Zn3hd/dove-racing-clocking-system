@@ -35,10 +35,13 @@ def issue_token(user_id: UUID) -> str:
     return jwt.encode({"sub": str(user_id), "iat": now, "exp": now + timedelta(minutes=30),
                        "iss": "dove-racing"}, signing_key(), algorithm=ALGORITHM)
 
-def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
-                 db: Session = Depends(get_db)) -> dict:
+def require_bearer(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)) -> HTTPAuthorizationCredentials:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(401, "Bearer token required")
+    return credentials
+
+def current_user(credentials: HTTPAuthorizationCredentials = Depends(require_bearer),
+                 db: Session = Depends(get_db)) -> dict:
     try:
         claims = jwt.decode(credentials.credentials, signing_key(), algorithms=[ALGORITHM],
                             issuer="dove-racing", options={"require": ["sub", "exp", "iat", "iss"]})
