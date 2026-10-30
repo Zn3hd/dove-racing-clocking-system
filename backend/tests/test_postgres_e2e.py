@@ -373,3 +373,49 @@ def test_messenger_verification_and_unsigned_rejection(scenario, monkeypatch):
     assert valid.status_code==200
     assert valid.text=="challenge"
     assert c.post(url,json={"object":"page","entry":[]}).status_code==401
+
+
+def test_messenger_signed_arrival_replay_and_provenance(scenario, monkeypatch):
+    import hashlib
+    import hmac
+    import json
+    s = scenario
+    client = s["client"]
+    admin = s["headers"](s["admin"])
+    monkeypatch.setenv("META_APP_SECRET", "integration-secret-" + "x" * 40)
+    monkeypatch.setenv("META_PAGE_ID", "test-page")
+    race = make_race(s)
+    entry = register(s, race, s["pigeon_guest"], "QR")
+    token_response = client.post("/clocking/qr/tokens", headers=admin,
+                                 json={"entry_id": entry})
+    assert token_response.status_code == 201
+    assert client.post(f"/races/{race}/activate", headers=admin).status_code == 200
+    link = client.post("/clocking/messenger/links", headers=admin,
+                       json={"page_id": "test-page", "sender_psid": "test-psid",
+                             "user_id": str(s["guest"])})
+    assert link.status_code == 201, link.text
+    message = {"object": "page", "entry": [{"id": "test-page", "messaging": [{
+        "sender": {"id": "test-psid"},
+        "message": {"mid": str(uuid4()),
+                    "text": "CLOCK " + str(entry) + " " + token_response.json()["token"]}
+    }]}]}
+    raw = json.dumps(message).encode()
+    signature = "sha256=" + hmac.new(
+        ("integration-secret-" + "x" * 40).encode(), raw, hashlib.sha256
+    ).hexdigest()
+    headers = {"X-Hub-Signature-256": signature}
+    first = client.post("/clocking/messenger/webhook", content=raw, headers=headers)
+    assert first.status_code == 200, first.text
+    assert first.json()["processed"] == 1
+    second = client.post("/clocking/messenger/webhook", content=raw, headers=headers)
+    assert second.status_code == 200, second.text
+    with s["engine"].connect() as db:
+        sources = db.execute(text("""
+            SELECT src.channel, src.clock_integrity_verified
+            FROM clocking_event_sources src
+            JOIN clocking_events ev ON ev.id = src.event_id
+            WHERE ev.entry_id = :entry
+        """), {"entry": entry}).mappings().all()
+    assert len(sources) == 1
+    assert sources[0]["channel"] == "messenger"
+    assert sources[0]["clock_integrity_verified"] is False
