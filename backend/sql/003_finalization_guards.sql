@@ -1,4 +1,4 @@
-"""Database-enforced immutability of finalized race results."""
+-- Database-enforced immutability of finalized race results.
 BEGIN;
 CREATE OR REPLACE FUNCTION protect_finalized_race_results()
 RETURNS trigger LANGUAGE plpgsql AS $$
