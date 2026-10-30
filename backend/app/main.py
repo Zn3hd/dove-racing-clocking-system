@@ -7,6 +7,8 @@ from .calculations import distance_meters, speed_mpm, convert_speed
 
 from .routers.races import router as races_router
 from .routers.entries import router as entries_router
+from .routers.auth import router as auth_router
+from .routers.participants import router as participants_router
 
 app = FastAPI(title="Dove Racing Prototype API", version="0.2.0")
 
@@ -45,3 +47,5 @@ def calculate_flight(payload: FlightCalculation):
 
 app.include_router(races_router)
 app.include_router(entries_router)
+app.include_router(auth_router)
+app.include_router(participants_router)
