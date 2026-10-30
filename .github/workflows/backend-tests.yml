@@ -48,5 +48,14 @@ jobs:
               conn.execute(Path("sql/001_schema.sql").read_text())
               conn.execute(Path("sql/002_seed.sql").read_text())
           PY
+      - name: Compile Python source (catch syntax errors)
+        run: python -m compileall -q app tests
       - name: Run unit, API, and PostgreSQL integration tests
-        run: python -m pytest -q
+        run: python -m pytest -v --tb=short --junitxml=pytest-results.xml
+      - name: Upload test report (including failures)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-pytest-results
+          path: backend/pytest-results.xml
+          if-no-files-found: warn
