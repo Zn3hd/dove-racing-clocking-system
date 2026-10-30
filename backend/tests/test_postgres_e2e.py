@@ -162,3 +162,31 @@ def test_rfid_simulator_idempotency_and_wrong_device(scenario):
     events=c.get("/clocking/events",headers=admin,params={"race_id":race})
     assert events.status_code==200
     assert len(events.json())==1
+
+
+def test_approved_guest_arrival_appears_in_provisional_leaderboard(scenario):
+    s=scenario
+    c=s["client"]
+    admin=s["headers"](s["admin"])
+    race=make_race(s)
+    entry=register(s,race,s["pigeon_guest"],"QR")
+    issued=c.post("/clocking/qr/tokens",headers=admin,json={"entry_id":entry})
+    assert issued.status_code==201,issued.text
+    assert c.post(f"/races/{race}/activate",headers=admin).status_code==200
+    arrival=c.post("/clocking/qr/scans",headers=s["headers"](s["guest"]),json={
+        "entry_id":entry,"token":issued.json()["token"],"idempotency_key":str(uuid4())
+    })
+    assert arrival.status_code==202,arrival.text
+    before=c.get(f"/races/{race}/leaderboard-preview",headers=admin)
+    assert before.status_code==200,before.text
+    assert before.json()["entries"]==[]
+    reviewed=c.post(f"/clocking/events/{arrival.json()['event_id']}/review",
+        headers=admin,json={"decision":"approve","reason":"Verified supporting arrival evidence"})
+    assert reviewed.status_code==200,reviewed.text
+    preview=c.get(f"/races/{race}/leaderboard-preview",headers=admin)
+    assert preview.status_code==200,preview.text
+    assert preview.json()["official"] is False
+    assert len(preview.json()["entries"])==1
+    assert preview.json()["entries"][0]["entry_id"]==entry
+    assert preview.json()["entries"][0]["clocking_method"]=="QR"
+    assert preview.json()["entries"][0]["verification_status"]=="provisional"
