@@ -184,3 +184,49 @@ def list_pending_events(race_id: UUID, actor: dict = Depends(require_admin),
         WHERE e.race_id=:race ORDER BY c.received_at DESC LIMIT 500
     """), {"race":race_id})
     return [dict(row._mapping) for row in rows]
+
+
+class EventReviewRequest(BaseModel):
+    decision: Literal["approve", "reject"]
+    reason: str = Field(min_length=8, max_length=1000)
+
+
+@router.post("/events/{event_id}/review")
+def review_event(event_id: UUID, payload: EventReviewRequest,
+                 actor: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    """Record human review, but do not produce or certify official results."""
+    with db.begin():
+        event = db.execute(text("""
+            SELECT c.id,c.status,r.status AS race_status
+            FROM clocking_events c JOIN race_entries e ON e.id=c.entry_id
+            JOIN races r ON r.id=e.race_id
+            WHERE c.id=:id FOR UPDATE OF c
+        """), {"id":event_id}).mappings().first()
+        if event is None:
+            raise HTTPException(404, "Event not found")
+        if event["race_status"] == "finalized":
+            raise HTTPException(409, "Finalized races cannot be reviewed")
+        if event["status"] != "pending":
+            raise HTTPException(409, "Only pending events can be reviewed")
+        previous = db.execute(text("""
+            SELECT id FROM clocking_reviews WHERE event_id=:id LIMIT 1
+        """), {"id":event_id}).scalar_one_or_none()
+        if previous:
+            raise HTTPException(409, "Event has already been reviewed")
+        review_id = uuid4()
+        db.execute(text("""
+            INSERT INTO clocking_reviews(id,event_id,reviewed_by,decision,reason)
+            VALUES (:id,:event,:actor,:decision,:reason)
+        """), {"id":review_id,"event":event_id,"actor":actor["id"],
+                "decision":payload.decision,"reason":payload.reason})
+        if payload.decision == "reject":
+            db.execute(text("""
+                UPDATE clocking_events SET status='invalid',rejection_reason=:reason WHERE id=:id
+            """), {"id":event_id,"reason":payload.reason})
+        db.execute(text("""
+            INSERT INTO audit_logs(actor_id,action,entity_type,entity_id)
+            VALUES (:actor,'clocking_event.reviewed','clocking_event',:id)
+        """), {"actor":actor["id"],"id":event_id})
+    return {"event_id":event_id,"review_id":review_id,"decision":payload.decision,
+            "event_status":"invalid" if payload.decision=="reject" else "pending",
+            "official_result_created":False}
