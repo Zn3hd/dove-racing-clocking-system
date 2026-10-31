@@ -1,0 +1,21 @@
+{
+  "wifi_ssid": "REPLACE",
+  "wifi_password": "REPLACE",
+  "backend_url": "https://your-backend.example",
+  "device_id": "00000000-0000-0000-0000-000000000001",
+  "race_id": "00000000-0000-0000-0000-000000000002",
+  "device_token": "REPLACE_WITH_PROVISIONED_DEVICE_TOKEN",
+  "root_ca": "-----BEGIN CERTIFICATE-----\nREPLACE_WITH_BACKEND_ROOT_CA_PEM\n-----END CERTIFICATE-----\n",
+  "protocol": "site-ascii-lines-v1",
+  "simulated": false,
+  "capture_mode": "operator",
+  "reader_baud": 9600,
+  "reader_rx": 16,
+  "reader_tx": 17,
+  "terminator": 10,
+  "uid_prefix": "",
+  "uid_suffix": "",
+  "uid_format": "decimal",
+  "uid_length": 10,
+  "normalization": "preserve"
+}

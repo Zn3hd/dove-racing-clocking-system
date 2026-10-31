@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Guest QR clocking · Pigeon Racing</title>
+  <link rel="stylesheet" href="/dashboard/styles.css">
+  <link rel="stylesheet" href="/dashboard/scan.css">
+  <script src="/dashboard/vendor/jsQR.js" defer></script>
+  <script src="/dashboard/qr-core.js" defer></script>
+  <script src="/dashboard/scan.js" defer></script>
+</head>
+<body>
+  <main class="scan-shell">
+    <a class="eyebrow" href="/dashboard/">PIGEON RACING CLOCKING SYSTEM</a>
+    <h1>Guest clocking</h1>
+    <p class="muted">Scan your club's QR code with a USB scanner or this device's camera.</p>
+    <p class="scan-note">Submissions use server receipt time and remain pending review. Official results are disabled.</p>
+    <p id="scan-status" role="status" aria-live="polite"></p>
+    <section id="scan-login">
+      <h2>Sign in to your guest account</h2>
+      <form id="scan-login-form" method="post" action="/dashboard/scan.html">
+        <label>Email<input name="email" type="email" autocomplete="username" required></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+        <button class="primary" type="submit">Sign in</button>
+      </form>
+    </section>
+    <section id="scan-workspace" hidden>
+      <div class="scan-actions"><strong id="scan-account"></strong><button id="scan-signout" class="outline" type="button">Sign out</button></div>
+      <form id="scan-form" method="post" action="/dashboard/scan.html">
+        <label>Your race entry<select id="scan-entry" required><option value="">Select an entry</option></select></label>
+        <button id="scan-reload" class="outline small" type="button">Reload entries</button>
+        <label>Scan method<select id="scan-source"><option value="usb_qr">USB QR scanner</option><option value="manual">Paste clocking token</option></select></label>
+        <label>Clocking QR<input id="scan-token" type="password" autocomplete="off" spellcheck="false" maxlength="1024" required placeholder="Focus here, then scan"></label>
+        <p class="field-help">A USB scanner must type text and finish with Enter. Keep this field focused. Retry the same code after a connection failure; the submission ID stays the same until you sign out or close this page.</p>
+        <button id="scan-submit" class="primary" type="submit">Submit scan</button>
+      </form>
+      <div class="scan-actions"><button id="scan-camera-start" class="outline" type="button">Use camera</button><button id="scan-camera-stop" class="outline" type="button" hidden>Stop camera</button></div>
+      <video id="scan-video" playsinline muted hidden aria-label="QR camera preview"></video>
+      <canvas id="scan-canvas" hidden></canvas>
+      <p class="field-help">Camera access starts only when you choose it. One code is captured at a time; choose Use camera again for the next scan. Signing out or hiding the page stops the camera.</p>
+    </section>
+    <noscript>JavaScript is required to sign in and submit a scan.</noscript>
+  </main>
+</body>
+</html>

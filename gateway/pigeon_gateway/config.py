@@ -25,6 +25,7 @@ class Config:
     network_host: str | None = None
     network_port: int | None = None
     network_timeout: float = 10.0
+    hid: dict | None = None
 
     def parse_uid(self, raw: str) -> str:
         if self.uid_profile is not None:
@@ -46,6 +47,11 @@ class Config:
             raise ValueError("Unsupported adapter; network readers require a documented protocol adapter")
         if self.uid_profile is not None:
             UIDProfile(**self.uid_profile)
+        if self.hid is not None:
+            from .hid_reader import HIDConfig
+            HIDConfig(**self.hid)
+            if self.adapter != "usb_hid":
+                raise ValueError("Raw HID configuration requires adapter usb_hid")
         if self.adapter == "network" and (not self.network_host or not isinstance(self.network_port, int) or not 1 <= self.network_port <= 65535):
             raise ValueError("Network adapter requires a host and port 1-65535")
         if not 0 < self.network_timeout <= 300:

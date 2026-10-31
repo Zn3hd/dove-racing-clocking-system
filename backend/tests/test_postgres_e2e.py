@@ -763,6 +763,41 @@ def test_qr_ownership_replay_revocation_and_review(scenario):
         headers=admin,json={"decision":"approve","reason":"Second review attempt"})
     assert repeated.status_code==409
 
+
+@pytest.mark.parametrize('source', ['usb_qr', 'web_camera'])
+def test_qr_scanner_provenance_and_owned_entry_listing(scenario, source):
+    import json
+    s = scenario
+    c = s['client']
+    admin = s['headers'](s['admin'])
+    guest = s['headers'](s['guest'])
+    race = make_race(s)
+    entry = register(s, race, s['pigeon_guest'], 'QR')
+    issued = c.post('/clocking/qr/tokens', headers=admin, json={'entry_id': entry})
+    assert issued.status_code == 201, issued.text
+    qr = json.loads(issued.json()['qr_payload'])
+    assert qr == {'version': 1, 'entry_id': str(entry), 'token': issued.json()['token']}
+    assert c.post(f'/races/{race}/activate', headers=admin).status_code == 200
+    own = c.get('/clocking/qr/entries', headers=guest)
+    assert own.status_code == 200, own.text
+    assert str(entry) in {row['entry_id'] for row in own.json()}
+    other = c.get('/clocking/qr/entries', headers=s['headers'](s['other']))
+    assert str(entry) not in {row['entry_id'] for row in other.json()}
+    payload = {'entry_id': str(entry), 'token': qr['token'], 'idempotency_key': str(uuid4()), 'capture_source': source}
+    received = c.post('/clocking/qr/scans', headers=guest, json=payload)
+    assert received.status_code == 202, received.text
+    assert received.json()['official_result_created'] is False
+    replay = c.post('/clocking/qr/scans', headers=guest, json=payload)
+    assert replay.json()['event_id'] == received.json()['event_id']
+    with s['engine'].connect() as db:
+        row = db.execute(text('SELECT status,metadata FROM clocking_events WHERE id=:id'),
+                         {'id': received.json()['event_id']}).mappings().one()
+        assert row['status'] == 'pending'
+        assert row['metadata']['capture_source'] == source
+        assert row['metadata']['capture_mode'] == 'operator'
+        assert row['metadata']['timestamp_trusted'] is False
+        assert qr['token'] not in json.dumps(row['metadata'])
+
 def test_rfid_simulator_idempotency_and_wrong_device(scenario):
     s=scenario
     c=s["client"]

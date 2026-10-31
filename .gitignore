@@ -11,6 +11,8 @@ secrets/
 
 # Python
 .venv/
+.pio/
+firmware/esp32/data/
 __pycache__/
 *.py[cod]
 .pytest_cache/

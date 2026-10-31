@@ -8,8 +8,9 @@ locally at the loft; it does not run in the cloud API or dashboard browser.
 
 - Simulator: queue known tag IDs without hardware or network access.
 - USB keyboard emulation: newline-terminated tags into a **focused console**.
-  This is not a raw USB HID driver, background keyboard hook, or automatic
-  reader discovery. Other keyboard input must not be entered into the console.
+  Other keyboard input must not be entered into the console.
+- Direct USB HID: optional hidapi userspace transport, explicitly selected
+  interface and report format. See the raw HID configuration below.
 - USB serial/COM: ASCII lines, newline-terminated, configurable port/baudrate,
   default 8N1. Binary framing, checksums, and vendor commands need a dedicated
   protocol adapter. Install the optional `serial` dependency for this mode.
@@ -146,5 +147,44 @@ Real USB/serial/Pi/network hardware needs a separate compatibility acceptance ru
 
 See [reader adapter plan](../docs/reader-adapter-plan.md) for the RDM582 /
 EM4100/EM4200 reference, configurable `uid_profile` fields, example configuration,
-and USB/web QR, ESP32 and Raspberry Pi acceptance work. QR scans must use the
+and implemented USB/web QR, ESP32 firmware and remaining hardware acceptance work. QR scans must use the
 QR API; never route QR tokens into the RFID queue.
+
+## Raw USB HID
+
+Install `python -m pip install -e ".[hid]"`. Keep `adapter="usb_hid"` and add
+a `hid` object to select direct capture; omitting it keeps console input.
+Configure the actual integer `vendor_id` and `product_id`, and, if necessary,
+`serial_number` and `interface_number`. Selection must match exactly one HID
+interface; ambiguous selections fail before reading. Inspect IDs with
+`python -c "import hid; print(hid.enumerate())"` locally. No IDs are inferred
+from a manufacturer name or radio frequency.
+
+Example shape (replace IDs and layout from your reader documentation):
+
+```json
+{
+  "vendor_id": 1234,
+  "product_id": 5678,
+  "interface_number": 0,
+  "report_size": 64,
+  "format": "ascii_lines",
+  "padding_byte": 0
+}
+```
+
+`ascii_lines` buffers newline-terminated ASCII across reports. `hex_report`
+emits an uppercase hex UID per selected report. `boot_keyboard` decodes strict
+8-byte US boot keyboard reports, shift, key release and Enter; other keyboard
+layouts need a dedicated decoder. Optional `report_id` selects and removes the
+first report-ID byte. `payload_offset` and `payload_length` then slice the
+remaining report. `padding_byte` removes only configured trailing padding.
+UID profiles run afterward and the immutable queue preserves the decoded scan.
+
+The operating system must allow interface access. Windows often reserves
+keyboard HID interfaces; use focused keyboard capture for those, or a documented
+vendor interface. Linux/Pi may need a narrow vendor/product-specific udev rule.
+Do not replace system keyboard drivers or run a global keyboard hook. This
+adapter uses hidapi; it is not a new kernel driver, vendor command implementation,
+or promise that every proprietary HID report is supported. See upstream
+[hidapi Python API](https://trezor.github.io/cython-hidapi/api.html).

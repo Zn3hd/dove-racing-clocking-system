@@ -5,6 +5,7 @@ QR submissions use server receipt time and remain pending human review.
 RFID simulation is administrator-only and remains pending.
 """
 import hashlib
+import json
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -32,6 +33,7 @@ class QRScanRequest(BaseModel):
     entry_id: UUID
     token: str = Field(min_length=32, max_length=256)
     idempotency_key: UUID
+    capture_source: Literal['manual', 'usb_qr', 'web_camera'] = 'manual'
 
 
 class RFIDSimulatorRequest(BaseModel):
@@ -83,8 +85,25 @@ def issue_qr_token(payload: QRTokenRequest, actor: dict = Depends(require_admin)
         """), {"actor":actor["id"],"id":token_id})
     # Returned once; do not log or store this raw token.
     return {"token_id":token_id,"token":token,"entry_id":payload.entry_id,
+            "qr_payload": json.dumps({"version": 1, "entry_id": str(payload.entry_id), "token": token}, separators=(',', ':')),
             "expires_in_minutes":payload.expires_in_minutes,
             "warning":"Bearer-style QR token; possession alone is insufficient for clocking"}
+
+
+@router.get("/qr/entries")
+def guest_qr_entries(actor: dict = Depends(current_user), db: Session = Depends(get_db)):
+    """Only the signed-in guest's currently released QR entries."""
+    if actor['role_code'] != 'guest':
+        raise HTTPException(403, 'Guest account required')
+    rows = db.execute(text('''SELECT e.id AS entry_id,r.name AS race_name,p.official_ring_number
+        FROM race_entries e JOIN races r ON r.id=e.race_id
+        JOIN pigeons p ON p.id=e.pigeon_id JOIN lofts l ON l.id=e.loft_id
+        WHERE l.user_id=:actor AND e.expected_method='QR' AND e.status='registered'
+        AND r.status='active' AND r.actual_release_at IS NOT NULL AND r.actual_release_at<now()
+        AND (r.club_id IS NULL OR EXISTS(SELECT 1 FROM club_memberships m
+            WHERE m.club_id=r.club_id AND m.user_id=:actor AND m.club_role IN ('member','guest')))
+        ORDER BY r.name,p.official_ring_number LIMIT 1000'''), {'actor': actor['id']}).mappings().all()
+    return [dict(row) for row in rows]
 
 
 @router.post("/qr/scans", status_code=202)
@@ -129,17 +148,20 @@ def submit_qr_scan(payload: QRScanRequest, actor: dict = Depends(current_user),
             if (existing["entry_id"] != payload.entry_id or existing["method"] != "QR"
                     or existing["submitted_by"] != actor["id"]):
                 raise HTTPException(409, "Idempotency key already used")
-            return {"event_id":existing["id"],"status":existing["status"],"duplicate_request":True}
+            return {"event_id":existing["id"],"status":existing["status"],"duplicate_request":True,
+                    "official_result_created":False}
         now = datetime.now(timezone.utc)
         if now <= entry["actual_release_at"]:
             raise HTTPException(409, "Race has not been released")
         db.execute(text("""
             INSERT INTO clocking_events(id,entry_id,method,qr_token_id,submitted_by,
-                idempotency_key,recorded_at,status)
-            VALUES (:id,:entry,'QR',:qr,:actor,:key,:recorded,'pending')
+                idempotency_key,recorded_at,status,metadata)
+            VALUES (:id,:entry,'QR',:qr,:actor,:key,:recorded,'pending',CAST(:metadata AS jsonb))
         """), {"id":event_id,"entry":payload.entry_id,"qr":qr,"actor":actor["id"],
-                "key":str(payload.idempotency_key),"recorded":now,"metadata":'{"simulated":true}'})
-    return {"event_id":event_id,"status":"pending","duplicate_request":False,
+                "key":str(payload.idempotency_key),"recorded":now,
+                "metadata":json.dumps({'capture_source':payload.capture_source,
+                                       'capture_mode':'operator','timestamp_trusted':False})})
+    return {"event_id":event_id,"status":"pending","duplicate_request":False,"official_result_created":False,
             "note":"Submission requires admin review; not an official arrival"}
 
 

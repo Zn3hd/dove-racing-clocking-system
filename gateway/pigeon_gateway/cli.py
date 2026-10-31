@@ -68,7 +68,11 @@ def main():
             sync_worker(config, token, stop)
             return
         if config.adapter == "usb_hid":
-            adapter = KeyboardLines(sys.stdin)
+            if config.hid is not None:
+                from .hid_reader import HIDConfig, RawHID
+                adapter = RawHID(HIDConfig(**config.hid))
+            else:
+                adapter = KeyboardLines(sys.stdin)
         elif config.adapter == "network":
             adapter = NetworkLines(config.network_host, config.network_port, config.network_timeout)
         elif config.adapter == "serial":
@@ -77,7 +81,7 @@ def main():
             raise ValueError("Use 'simulate --tag ...' to queue simulator scans")
         worker = threading.Thread(target=sync_worker, args=(config, token, stop), daemon=True)
         worker.start()
-        print("Reader ready. Keyboard readers require this console to stay focused.", flush=True)
+        print("Reader ready. Console keyboard capture requires this console to stay focused.", flush=True)
         for reading in adapter.readings():
             queue.enqueue(config, reading)
             print("Scan queued locally.", flush=True)
