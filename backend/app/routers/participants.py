@@ -1,8 +1,9 @@
 """Administrator-created accounts, loft verification and pigeon registration."""
 from typing import Literal
+from datetime import datetime
 from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -28,11 +29,23 @@ class ParticipantCreate(BaseModel):
             raise ValueError("Value must not be blank")
         return value
 
-class LoftCreate(BaseModel):
-    user_id: UUID
+class LoftLocation(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    latitude: float = Field(ge=-90, le=90)
-    longitude: float = Field(ge=-180, le=180)
+    latitude: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    longitude: float = Field(ge=-180, le=180, allow_inf_nan=False)
+    coordinate_source: Literal['manual','browser_gps','town_reference'] = 'manual'
+    gps_accuracy_m: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    gps_captured_at: datetime | None = None
+
+    @model_validator(mode='after')
+    def gps_evidence(self):
+        if self.gps_captured_at is not None and (self.gps_captured_at.tzinfo is None or self.gps_captured_at.utcoffset() is None):
+            raise ValueError('GPS capture timestamp must include a timezone')
+        if self.coordinate_source == 'browser_gps' and (self.gps_accuracy_m is None or self.gps_captured_at is None):
+            raise ValueError('GPS accuracy and capture time are required for device location')
+        if self.coordinate_source != 'browser_gps' and (self.gps_accuracy_m is not None or self.gps_captured_at is not None):
+            raise ValueError('GPS evidence is only accepted with browser_gps coordinates')
+        return self
 
     @field_validator("name")
     @classmethod
@@ -40,6 +53,10 @@ class LoftCreate(BaseModel):
         if not value.strip():
             raise ValueError("Name must not be blank")
         return value.strip()
+
+
+class LoftCreate(LoftLocation):
+    user_id: UUID
 
 class PigeonCreate(BaseModel):
     loft_id: UUID
@@ -85,10 +102,11 @@ def create_loft(payload: LoftCreate, db: Session = Depends(get_db),
                               {"id":payload.user_id}).scalar_one_or_none()
             if role not in ("member","guest"):
                 raise HTTPException(422,"Loft owner must be an active member or guest")
-            db.execute(text("""INSERT INTO lofts(id,user_id,name,latitude,longitude)
-                VALUES (:id,:user,:name,:lat,:lon)"""),
+            db.execute(text("""INSERT INTO lofts(id,user_id,name,latitude,longitude,coordinate_source,gps_accuracy_m,gps_captured_at)
+                VALUES (:id,:user,:name,:lat,:lon,:source,:accuracy,:captured)"""),
                 {"id":loft_id,"user":payload.user_id,"name":payload.name,
-                 "lat":payload.latitude,"lon":payload.longitude})
+                 "lat":payload.latitude,"lon":payload.longitude,"source":payload.coordinate_source,
+                 "accuracy":payload.gps_accuracy_m,"captured":payload.gps_captured_at})
             db.execute(text("""INSERT INTO audit_logs(actor_id,action,entity_type,entity_id)
                 VALUES (:actor,'loft.created','loft',:id)"""),
                 {"actor":actor["id"],"id":loft_id})
@@ -101,9 +119,11 @@ def verify_loft(loft_id: UUID, db: Session = Depends(get_db),
                 actor: dict = Depends(require_admin)):
     with db.begin():
         check_loft_admin(db, actor, loft_id)
-        row = db.execute(text("SELECT verified_at FROM lofts WHERE id=:id FOR UPDATE"),
+        row = db.execute(text("SELECT verified_at,coordinate_source FROM lofts WHERE id=:id FOR UPDATE"),
                          {"id":loft_id}).first()
         if row is None: raise HTTPException(404,"Loft not found")
+        if row[1] == 'town_reference':
+            raise HTTPException(422, 'Town reference coordinates cannot verify a loft. Record its exact location first.')
         if row[0] is not None: raise HTTPException(409,"Loft already verified")
         db.execute(text("""UPDATE lofts SET verified_at=now(),verified_by=:actor WHERE id=:id"""),
                    {"id":loft_id,"actor":actor["id"]})
@@ -145,17 +165,8 @@ class ParticipantEdit(BaseModel):
         return value.strip()
 
 
-class LoftEdit(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
-    latitude: float = Field(ge=-90, le=90)
-    longitude: float = Field(ge=-180, le=180)
-
-    @field_validator("name")
-    @classmethod
-    def nonblank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("Name must not be blank")
-        return value.strip()
+class LoftEdit(LoftLocation):
+    pass
 
 
 class PigeonEdit(BaseModel):
@@ -218,7 +229,7 @@ def list_lofts(club_id: UUID | None = None, db: Session = Depends(get_db),
                actor: dict = Depends(require_admin)):
     club = managed_club(db, actor, club_id)
     rows = db.execute(text("""SELECT l.id,l.user_id,l.name,l.latitude,l.longitude,
-        l.verified_at,l.verified_by FROM lofts l
+        l.verified_at,l.verified_by,l.coordinate_source,l.gps_accuracy_m,l.gps_captured_at FROM lofts l
         JOIN club_memberships m ON m.user_id=l.user_id
         WHERE m.club_id=:club AND m.club_role IN ('member','guest')
         ORDER BY l.name,l.id LIMIT 1000"""), {"club": club}).mappings().all()
@@ -256,22 +267,27 @@ def edit_loft(loft_id: UUID, payload: LoftEdit,
               db: Session = Depends(get_db), actor: dict = Depends(require_admin)):
     with db.begin():
         check_loft_admin(db, actor, loft_id)
-        loft = db.execute(text("SELECT latitude,longitude,verified_at FROM lofts WHERE id=:id FOR UPDATE"),
+        loft = db.execute(text("SELECT latitude,longitude,verified_at,coordinate_source,gps_accuracy_m,gps_captured_at FROM lofts WHERE id=:id FOR UPDATE"),
                           {"id": loft_id}).mappings().one()
         changed = (float(loft["latitude"]) != payload.latitude
-                   or float(loft["longitude"]) != payload.longitude)
+                   or float(loft["longitude"]) != payload.longitude
+                   or loft['coordinate_source'] != payload.coordinate_source
+                   or loft['gps_accuracy_m'] != payload.gps_accuracy_m
+                   or loft['gps_captured_at'] != payload.gps_captured_at)
         if changed:
             busy = db.execute(text("""SELECT EXISTS(SELECT 1 FROM race_entries e
                 JOIN races r ON r.id=e.race_id WHERE e.loft_id=:id
                 AND e.status='registered' AND r.status IN ('open','active','closed'))"""),
                 {"id": loft_id}).scalar()
             if busy:
-                raise HTTPException(409, "Loft coordinates cannot change during an unfinished race")
+                raise HTTPException(409, "Loft location or GPS evidence cannot change during an unfinished race")
         db.execute(text("""UPDATE lofts SET name=:name,latitude=:lat,longitude=:lon,
+            coordinate_source=:source,gps_accuracy_m=:accuracy,gps_captured_at=:captured,
             verified_at=CASE WHEN :changed THEN NULL ELSE verified_at END,
             verified_by=CASE WHEN :changed THEN NULL ELSE verified_by END WHERE id=:id"""),
             {"id": loft_id, "name": payload.name, "lat": payload.latitude,
-             "lon": payload.longitude, "changed": changed})
+             "lon": payload.longitude, "changed": changed,"source":payload.coordinate_source,
+             "accuracy":payload.gps_accuracy_m,"captured":payload.gps_captured_at})
         audit_edit(db, actor, "loft.updated", "loft", loft_id)
     return {"id": loft_id, **payload.model_dump(),
             "verified": not changed and loft["verified_at"] is not None}

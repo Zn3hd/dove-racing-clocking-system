@@ -2,7 +2,7 @@
 
 // Tokens live only in memory. Refreshing or closing the page signs out.
 const $ = (selector) => document.querySelector(selector);
-const state = { token: null, club: null, people: [], editing: null, timer: null,
+const state = { token: null, club: null, people: [], lofts: [], editing: null, timer: null,
   controller: new AbortController(), loading: false, loadError: false };
 
 function message(text, failure = false) {
@@ -12,13 +12,18 @@ function message(text, failure = false) {
 }
 
 function signOut(reason = "") {
+  locationDraft.request += 1;
+  Object.assign(locationDraft, { userId: null, loft: null, source: "manual", accuracy: null,
+    capturedAt: null, changed: false, pending: false });
+  $("#location-member").textContent = "";
+  $("#gps-status").textContent = "";
   stopLive();
   live.raceId = "";
   resetLive("Select a race to see its arrivals.");
   state.controller.abort();
   state.controller = new AbortController();
   clearTimeout(state.timer);
-  Object.assign(state, { token: null, club: null, people: [], editing: null,
+  Object.assign(state, { token: null, club: null, people: [], lofts: [], editing: null,
     loading: false, loadError: false });
   document.querySelectorAll("dialog").forEach((dialog) => {
     dialog.close();
@@ -122,8 +127,16 @@ function renderPeople() {
       $("#edit-form").elements.namedItem("full_name").value = person.full_name;
       $("#edit-form").elements.namedItem("phone").value = person.phone || "";
     });
-    actions.append(edit);
-    row.append(personCell, roleCell, element("td", "", person.phone || "—"), statusCell, actions);
+    const loft = state.lofts.find((item) => item.user_id === person.id);
+    const gps = element("td", "gps-cell");
+    gps.append(element("span", "person-name", loft ? `${Number(loft.latitude).toFixed(6)}, ${Number(loft.longitude).toFixed(6)}` : "Not recorded"));
+    if (loft) gps.append(element("span", "person-email", `${loft.verified_at ? "Verified" : "Unverified"} / ${loft.coordinate_source.replaceAll("_", " ")}`));
+    const locationButton = element("button", "edit-button location-action", "GPS");
+    locationButton.type = "button";
+    locationButton.setAttribute("aria-label", `Manage loft location for ${person.full_name}`);
+    locationButton.addEventListener("click", () => openLocation(person, loft));
+    actions.append(edit, locationButton);
+    row.append(personCell, roleCell, element("td", "", person.phone || "—"), gps, statusCell, actions);
     body.append(row);
   }
   $("#directory-count").textContent = String(state.people.length);
@@ -145,6 +158,7 @@ async function loadClub() {
   state.loading = true;
   state.loadError = false;
   state.people = [];
+  state.lofts = [];
   $("#refresh-button").disabled = true;
   $("#add-member-button").disabled = true;
   $("#assign-button").disabled = true;
@@ -155,7 +169,10 @@ async function loadClub() {
     $("#sidebar-club").textContent = state.club ? state.club.name : "No club assigned";
     $("#club-description").textContent = state.club ? `${state.club.name} · Manage the people behind every flight.` : "Manage the people behind every flight.";
     $("#club-setup").hidden = Boolean(state.club);
-    if (state.club) state.people = await api(`/participants?club_id=${encodeURIComponent(state.club.id)}`);
+    if (state.club) [state.people, state.lofts] = await Promise.all([
+      api(`/participants?club_id=${encodeURIComponent(state.club.id)}`),
+      api(`/lofts?club_id=${encodeURIComponent(state.club.id)}`),
+    ]);
     $("#add-member-button").disabled = !state.club;
     $("#assign-button").disabled = !state.club;
   } catch (error) {
@@ -400,4 +417,126 @@ $("#live-race").addEventListener("change", () => {
   resetLive(live.raceId ? "Loading arrivals..." : "Select a race to see its arrivals.");
   $("#live-feed-state").textContent = live.raceId ? "Connecting..." : "No race selected";
   pollLive();
+});
+
+const locationDraft = { request: 0, userId: null, loft: null, source: "manual",
+  accuracy: null, capturedAt: null, changed: false, pending: false };
+
+function updateLocationControls() {
+  $("#verify-location").disabled = locationDraft.pending || locationDraft.changed ||
+    !locationDraft.loft || Boolean(locationDraft.loft.verified_at) || locationDraft.source === "town_reference";
+  $("#location-form button[type=submit]").disabled = locationDraft.pending;
+}
+
+function openLocation(person, loft) {
+  openDialog("#location-dialog");
+  locationDraft.request += 1;
+  Object.assign(locationDraft, { userId: person.id, loft: loft || null, changed: false, pending: false,
+    source: loft?.coordinate_source || "manual", accuracy: loft?.gps_accuracy_m ?? null,
+    capturedAt: loft?.gps_captured_at || null });
+  const form = $("#location-form");
+  form.elements.namedItem("name").value = loft?.name || `${person.full_name}'s loft`;
+  form.elements.namedItem("latitude").value = loft ? Number(loft.latitude).toFixed(7) : "";
+  form.elements.namedItem("longitude").value = loft ? Number(loft.longitude).toFixed(7) : "";
+  $("#location-member").textContent = person.full_name;
+  $("#capture-gps").disabled = false;
+  $("#gps-status").textContent = loft ? `Saved source: ${locationDraft.source.replaceAll("_", " ")}${locationDraft.accuracy !== null ? ` / reported accuracy ${Number(locationDraft.accuracy).toFixed(1)} m` : ""}.` : "Enter exact loft coordinates or capture them at the loft.";
+  $("#loft-verification").hidden = !loft;
+  $("#location-verification-status").textContent = loft?.verified_at ? "This saved loft location is verified. Changing it clears verification." : "Saved location is unverified. Check it independently before verifying.";
+  updateLocationControls();
+}
+
+$("#location-dialog").addEventListener("close", () => { locationDraft.request += 1; locationDraft.pending = false; });
+$("#location-form").addEventListener("input", (event) => {
+  if (event.target.id === "location-confirmed") return;
+  locationDraft.changed = true;
+  if (["latitude", "longitude"].includes(event.target.name)) {
+    locationDraft.request += 1;
+    Object.assign(locationDraft, { source: "manual", accuracy: null, capturedAt: null, pending: false });
+    $("#capture-gps").disabled = false;
+    $("#gps-status").textContent = "Manual coordinates. Save and independently verify the exact loft location.";
+  }
+  updateLocationControls();
+});
+$("#sison-example").addEventListener("click", () => {
+  locationDraft.request += 1;
+  Object.assign(locationDraft, { source: "town_reference", accuracy: null, capturedAt: null, changed: true, pending: false });
+  const form = $("#location-form");
+  form.elements.namedItem("latitude").value = "9.6588000";
+  form.elements.namedItem("longitude").value = "125.5286000";
+  $("#capture-gps").disabled = false;
+  $("#gps-status").textContent = "Sison municipal reference only. This is approximate and cannot verify a racing loft.";
+  updateLocationControls();
+});
+$("#capture-gps").addEventListener("click", () => {
+  if (!window.isSecureContext || !navigator.geolocation) {
+    $("#gps-status").textContent = "Device location is unavailable. Use HTTPS and a location-enabled browser, or enter exact coordinates manually.";
+    return;
+  }
+  const request = ++locationDraft.request;
+  const token = state.token;
+  locationDraft.pending = true;
+  $("#capture-gps").disabled = true;
+  $("#gps-status").textContent = "Requesting this device's location. Allow location access only if you are at the member's loft.";
+  updateLocationControls();
+  const current = () => request === locationDraft.request && state.token === token && $("#location-dialog").open;
+  navigator.geolocation.getCurrentPosition((position) => {
+    if (!current()) return;
+    const form = $("#location-form");
+    form.elements.namedItem("latitude").value = position.coords.latitude.toFixed(7);
+    form.elements.namedItem("longitude").value = position.coords.longitude.toFixed(7);
+    Object.assign(locationDraft, { source: "browser_gps", accuracy: position.coords.accuracy,
+      capturedAt: new Date(position.timestamp).toISOString(), changed: true, pending: false });
+    $("#gps-status").textContent = `Device location captured. Reported accuracy: ${position.coords.accuracy.toFixed(1)} m. Check the location, then save; this does not automatically verify the loft.`;
+    $("#capture-gps").disabled = false;
+    updateLocationControls();
+  }, (error) => {
+    if (!current()) return;
+    locationDraft.pending = false;
+    $("#capture-gps").disabled = false;
+    $("#gps-status").textContent = error.code === 1 ? "Location permission denied. Enter exact coordinates manually or enable permission and retry." : "Unable to get a location fix. Try outdoors at the loft, or enter exact coordinates manually.";
+    updateLocationControls();
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+});
+
+bindForm("#location-form", async (data, dialog) => {
+  if (locationDraft.pending) throw new Error("Wait for location capture to finish.");
+  const payload = { name: data.name.trim(), latitude: Number(data.latitude), longitude: Number(data.longitude),
+    coordinate_source: locationDraft.source, gps_accuracy_m: locationDraft.accuracy,
+    gps_captured_at: locationDraft.capturedAt };
+  if (locationDraft.loft) await post(`/lofts/${locationDraft.loft.id}`, payload, "PUT");
+  else await post("/lofts", { ...payload, user_id: locationDraft.userId });
+  dialog.close();
+  message("Loft location saved. Reopen GPS to verify it after independently checking the exact location.");
+  await loadClub();
+});
+
+$("#verify-location").addEventListener("click", async () => {
+  const form = $("#location-form");
+  const error = form.querySelector(".form-error");
+  error.textContent = "";
+  if (!locationDraft.loft || locationDraft.changed || locationDraft.pending) {
+    error.textContent = "Save the location first, then reopen it to verify.";
+    return;
+  }
+  if (!$("#location-confirmed").checked) {
+    error.textContent = "Confirm that you independently checked the saved coordinates at the loft.";
+    return;
+  }
+  const controls = [...form.querySelectorAll("input,button")];
+  const disabled = controls.map((control) => control.disabled);
+  controls.forEach((control) => { control.disabled = true; });
+  const stopCancel = (event) => event.preventDefault();
+  $("#location-dialog").addEventListener("cancel", stopCancel);
+  try {
+    await post(`/lofts/${locationDraft.loft.id}/verify`, {});
+    $("#location-dialog").close();
+    message("Loft location verified. It can now be used for pigeon and race registration.");
+    await loadClub();
+  } catch (problem) {
+    if (problem.name !== "AbortError") error.textContent = problem.message;
+  } finally {
+    controls.forEach((control, index) => { control.disabled = disabled[index]; });
+    $("#location-dialog").removeEventListener("cancel", stopCancel);
+  }
 });

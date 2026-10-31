@@ -39,6 +39,14 @@ criteria and have not been validated by a full repository and deployment audit.
 
 ## Next milestones, in order
 
+### Member/loft GPS
+
+Migration 011 and the Members GPS dialog add exact manual/device coordinates,
+reported accuracy, capture time, and source. Sison is a town-reference example
+only, blocked from loft verification. Changed location evidence clears
+verification; existing race snapshots and unfinished-race guards are preserved.
+See `member-gps.md`. Browser capture requires a physical device acceptance run.
+
 ### Clocking validation and reliability
 
 Migration 010 introduces configurable race speed/timestamp policy, shared

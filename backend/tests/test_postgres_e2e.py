@@ -636,6 +636,60 @@ def test_suspicious_clocking_validation_and_simulator_guards(scenario):
     assert 'arrival_not_after_release' in next(row for row in flagged if row['event_id'] == valid_id)['blocking_flags']
 
 
+def test_member_gps_loft_verification_and_distance_snapshot(scenario):
+    from app.calculations import distance_meters
+    s = scenario
+    c = s['client']
+    admin = s['headers'](s['admin'])
+    with s['engine'].begin() as db:
+        db.execute(text("UPDATE users SET role_code='president' WHERE id=:id"), {'id': s['other']})
+    outsider = s['headers'](s['other'])
+    club = c.post('/clubs', headers=admin, json={'name': 'GPS Test Club'}).json()['id']
+    user = c.post('/participants', headers=admin, json={'full_name': 'GPS Test Guest',
+        'email': f'{uuid4()}@example.test', 'password': 'gps-test-guest-password', 'role': 'guest'})
+    assert user.status_code == 201
+    uid = user.json()['id']
+    s['extra_user_ids'].append(UUID(uid))
+    town = {'user_id': uid, 'name': 'Sison reference example', 'latitude': 9.6588,
+            'longitude': 125.5286, 'coordinate_source': 'town_reference'}
+    assert c.post('/lofts', headers=outsider, json=town).status_code == 403
+    saved = c.post('/lofts', headers=admin, json=town)
+    assert saved.status_code == 201, saved.text
+    loft = saved.json()['id']
+    assert c.post(f'/lofts/{loft}/verify', headers=admin).status_code == 422
+    gps = {'name': 'Verified test loft', 'latitude': 9.65881, 'longitude': 125.52861,
+           'coordinate_source': 'browser_gps', 'gps_accuracy_m': 8.5,
+           'gps_captured_at': datetime.now(timezone.utc).isoformat()}
+    assert c.put(f'/lofts/{loft}', headers=outsider, json=gps).status_code == 403
+    assert c.put(f'/lofts/{loft}', headers=admin,
+                 json={**gps, 'gps_accuracy_m': None}).status_code == 422
+    changed = c.put(f'/lofts/{loft}', headers=admin, json=gps)
+    assert changed.status_code == 200, changed.text
+    assert changed.json()['verified'] is False
+    assert c.post(f'/lofts/{loft}/verify', headers=admin).status_code == 200
+    record = next(row for row in c.get(f'/lofts?club_id={club}', headers=admin).json() if row['id'] == loft)
+    assert record['gps_accuracy_m'] == 8.5
+    assert record['gps_captured_at'] is not None
+    assert record['coordinate_source'] == 'browser_gps'
+    # Refreshing the location evidence clears verification even at the same point.
+    gps['gps_accuracy_m'] = 6
+    assert c.put(f'/lofts/{loft}', headers=admin, json=gps).json()['verified'] is False
+    assert c.post(f'/lofts/{loft}/verify', headers=admin).status_code == 200
+    bird = c.post('/pigeons', headers=admin, json={'loft_id': loft, 'official_ring_number': f'GPS-{uuid4()}'})
+    assert bird.status_code == 201
+    race = make_race(s)
+    entry = register(s, race, bird.json()['id'], 'QR')
+    expected = distance_meters(10, 125.6, gps['latitude'], gps['longitude'])
+    listed = c.get(f'/races/{race}/entries', headers=admin).json()[0]
+    assert listed['distance_meters'] == pytest.approx(expected, abs=.001)
+    assert c.put(f'/lofts/{loft}', headers=admin, json={**gps, 'latitude': 9.7}).status_code == 409
+    with s['engine'].connect() as db:
+        snapshot = db.execute(text('SELECT loft_latitude,loft_longitude,distance_meters FROM race_entries WHERE id=:id'),
+                              {'id': entry}).mappings().one()
+    assert float(snapshot['loft_latitude']) == gps['latitude']
+    assert float(snapshot['distance_meters']) == pytest.approx(expected, abs=.001)
+
+
 def make_race(s):
     c=s["client"]
     headers=s["headers"](s["admin"])
