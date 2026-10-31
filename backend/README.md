@@ -57,6 +57,8 @@ Integration suite status must be verified in GitHub Actions; committed tests are
 
 ## Single-club administration
 
+Leaderboard previews exclude physically rejected arrivals, even if a prior evidence review approved them. Each preview row includes `physical_verification` (`not_recorded` or `confirmed`), `physically_verified_at`, and `source_channel`. Confirmed physical identity alone does not certify the submitted arrival time: every preview remains provisional and official finalization remains disabled.
+
 - `POST /clubs`: a chairman or president creates the single club and becomes its club administrator. Further creation requests return `409`.
 - `GET /clubs`: lists clubs where the caller has a club administrator membership.
 - `POST /clubs/{club_id}/members`: a club administrator adds an active member or guest using `{"user_id":"USER_UUID"}`. Duplicate additions, including concurrent requests, return `409`.

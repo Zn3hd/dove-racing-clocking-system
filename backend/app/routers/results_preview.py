@@ -33,11 +33,17 @@ def preview_leaderboard(race_id: UUID, db: Session = Depends(get_db),
         SELECT DISTINCT ON (e.id)
                e.id AS entry_id,e.pigeon_id,e.loft_id,e.distance_meters,
                e.expected_method AS clocking_method,c.id AS event_id,
-               c.recorded_at AS arrival_at
+               c.recorded_at AS arrival_at,
+               gv.decision AS physical_verification,
+               gv.verified_at AS physically_verified_at,
+               src.channel AS source_channel
         FROM race_entries e
         JOIN clocking_events c ON c.entry_id=e.id
+        LEFT JOIN guest_arrival_verifications gv ON gv.event_id=c.id
+        LEFT JOIN clocking_event_sources src ON src.event_id=c.id
         WHERE e.race_id=:race AND e.status='registered'
           AND c.status='pending'
+          AND (gv.decision IS NULL OR gv.decision='confirmed')
           AND EXISTS (
               SELECT 1 FROM clocking_reviews cr
               WHERE cr.event_id=c.id AND cr.decision='approve'
@@ -60,6 +66,10 @@ def preview_leaderboard(race_id: UUID, db: Session = Depends(get_db),
             "display_speed":round(convert_speed(velocity,race["display_speed_unit"]),4),
             "qualifying_status":"qualified" if velocity>=float(race["minimum_speed_mpm"]) else "below_minimum",
             "verification_status":"provisional",
+            "physical_verification":event["physical_verification"] or "not_recorded",
+            "physically_verified_at":event["physically_verified_at"],
+            "source_channel":event["source_channel"] or (
+                "qr" if event["clocking_method"] == "QR" else "rfid"),
         })
     # Only qualifying entries receive a rank; below-minimum entries remain visible.
     ranked = leaderboard(rows, race["guest_ranking_mode"])

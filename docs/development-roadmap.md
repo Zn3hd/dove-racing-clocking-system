@@ -15,14 +15,18 @@ criteria and have not been validated by a full repository and deployment audit.
   nullable race club relationship. Race administration and evidence access now
   enforce club administrator membership; historical races remain creator-only.
   Club race entries require active owners who belong to the club. The new
-  PostgreSQL isolation scenarios are written but have not been executed locally.
+  PostgreSQL isolation scenarios passed in GitHub Actions for commit `6a024fc`
+  (46 tests passed across the complete suite).
 - Participants: member/guest creation, loft creation/verification, and pigeon
   registration exist. Club-scoped listing/editing, atomic account membership,
   coordinate verification reset, and unfinished-race editing guards are added.
   Assets inherit club scope through owner membership. Legacy global asset
   access remains only before the first club is created.
 - Races and clocking: registration, activation, provisional arrivals, review,
-  and finalization code exist; a full acceptance audit remains outstanding.
+  and guarded closing exist. Physically rejected arrivals are excluded from
+  previews; physical confirmation is displayed separately from timing trust.
+  A full club-to-guest-race integration scenario is added. Official finalization
+  deliberately remains disabled, including after physical guest confirmation.
 - Dashboard: no web administration frontend exists in this repository.
 - QA: unit/API tests and disposable PostgreSQL CI exist. Local PostgreSQL
   integration execution remains unavailable in the current environment.
@@ -39,7 +43,7 @@ criteria and have not been validated by a full repository and deployment audit.
    device administration, and clocking source routes in the permission audit.
    Race/evidence checks, device provisioning, Messenger account administration,
    participant management, and membership checks during guest/provider ingestion
-   are implemented. PostgreSQL integration verification remains required.
+   are implemented and passed PostgreSQL CI in commit `6a024fc`.
 3. Connect participants and assets: define club membership requirements for
    lofts/pigeons, enforce them during registration, and add scoped management
    and editing workflows. Preserve historical race coordinate snapshots.

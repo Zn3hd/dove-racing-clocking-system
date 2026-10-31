@@ -261,6 +261,93 @@ def test_club_participant_asset_management(scenario):
     assert scan.status_code == 403
 
 
+def test_complete_club_guest_race_with_physical_review(scenario):
+    """API workflow on disposable data; finalization deliberately fails closed."""
+    s = scenario
+    c = s["client"]
+    admin = s["headers"](s["admin"])
+    created = c.post("/clubs", headers=admin, json={"name": "Full Workflow Club"})
+    assert created.status_code == 201, created.text
+    club = created.json()["id"]
+    birds = []
+    for index in range(2):
+        user = c.post("/participants", headers=admin, json={
+            "club_id": club, "full_name": f"Workflow Guest {index}",
+            "email": f"{uuid4()}@example.test", "password": "workflow-test-password",
+            "role": "guest"})
+        assert user.status_code == 201, user.text
+        uid = UUID(user.json()["id"])
+        s["extra_user_ids"].append(uid)
+        loft = c.post("/lofts", headers=admin, json={"user_id": str(uid),
+            "name": f"Workflow Loft {index}", "latitude": 9.8 - index * .1,
+            "longitude": 125.5})
+        assert loft.status_code == 201, loft.text
+        loft_id = loft.json()["id"]
+        ring = f"WORKFLOW-{uuid4()}"
+        bird_payload = {"loft_id": loft_id, "official_ring_number": ring}
+        assert c.post("/pigeons", headers=admin, json=bird_payload).status_code == 422
+        assert c.post(f"/lofts/{loft_id}/verify", headers=admin).status_code == 200
+        bird = c.post("/pigeons", headers=admin, json=bird_payload)
+        assert bird.status_code == 201, bird.text
+        birds.append((uid, bird.json()["id"], ring))
+    race_response = c.post("/races", headers=admin, json={"club_id": club,
+        "name": "Complete Guest Workflow", "release_latitude": 10,
+        "release_longitude": 125.6, "minimum_speed_mpm": 0})
+    assert race_response.status_code == 201, race_response.text
+    race = race_response.json()["id"]
+    assert c.post(f"/races/{race}/open", headers=admin).status_code == 200
+    entries = [register(s, race, bird, "QR") for _, bird, _ in birds]
+    tokens = []
+    for entry in entries:
+        issued = c.post("/clocking/qr/tokens", headers=admin, json={"entry_id": entry})
+        assert issued.status_code == 201, issued.text
+        tokens.append(issued.json()["token"])
+    assert c.post(f"/races/{race}/activate", headers=admin).status_code == 200
+    # Only the disposable fixture is backdated to avoid an hour-long test.
+    with s["engine"].begin() as db:
+        db.execute(text("UPDATE races SET actual_release_at=now()-interval '1 hour' WHERE id=:id"),
+                   {"id": race})
+    events = []
+    for (uid, _, _), entry, token in zip(birds, entries, tokens):
+        arrival = c.post("/clocking/qr/scans", headers=s["headers"](uid), json={
+            "entry_id": entry, "token": token, "idempotency_key": str(uuid4())})
+        assert arrival.status_code == 202, arrival.text
+        events.append(arrival.json()["event_id"])
+    preview_url = f"/races/{race}/leaderboard-preview"
+    assert c.get(preview_url, headers=admin).json()["entries"] == []
+    for event in events:
+        assert c.post(f"/clocking/events/{event}/review", headers=admin, json={
+            "decision": "approve", "reason": "Workflow evidence reviewed"}).status_code == 200
+    provisional = c.get(preview_url, headers=admin)
+    assert provisional.status_code == 200, provisional.text
+    rows = provisional.json()["entries"]
+    assert len(rows) == 2
+    assert [row["rank"] for row in rows] == [1, 2]
+    assert rows[0]["speed_mpm"] > rows[1]["speed_mpm"]
+    assert all(row["physical_verification"] == "not_recorded" for row in rows)
+    for index, (event, (_, _, ring)) in enumerate(zip(events, birds)):
+        result = c.post(f"/clocking/events/{event}/guest-verification", headers=admin, json={
+            "decision": "confirmed" if index == 0 else "rejected",
+            "ring_number_seen": ring, "evidence_note": "Physical inspection recorded by test official"})
+        assert result.status_code == 201, result.text
+    reviewed = c.get(preview_url, headers=admin).json()
+    assert reviewed["official"] is False
+    assert len(reviewed["entries"]) == 1
+    row = reviewed["entries"][0]
+    assert row["event_id"] == events[0]
+    assert row["rank"] == 1
+    assert row["physical_verification"] == "confirmed"
+    assert row["physically_verified_at"] is not None
+    assert row["verification_status"] == "provisional"
+    assert row["speed_mpm"] == pytest.approx(row["distance_meters"] /
+        (row["flight_duration_seconds"] / 60), abs=.00001)
+    assert c.post(f"/races/{race}/close", headers=admin).status_code == 200
+    assert c.post(f"/races/{race}/finalize", headers=admin).status_code == 409
+    with s["engine"].connect() as db:
+        assert db.execute(text("""SELECT count(*) FROM race_results rr JOIN race_entries e
+            ON e.id=rr.entry_id WHERE e.race_id=:race"""), {"race": race}).scalar_one() == 0
+
+
 def make_race(s):
     c=s["client"]
     headers=s["headers"](s["admin"])
