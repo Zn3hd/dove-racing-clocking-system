@@ -5,7 +5,7 @@ Tests use unique UUIDs and remove their own rows in FK-safe order.
 """
 import os
 from concurrent.futures import ThreadPoolExecutor
-from uuid import uuid4
+from uuid import UUID, uuid4
 from datetime import datetime, timezone, timedelta
 import pytest
 from fastapi.testclient import TestClient
@@ -52,10 +52,13 @@ def scenario(monkeypatch):
     data["engine"] = engine
     data["client"] = TestClient(app)
     data["headers"] = lambda uid: {"Authorization":f"Bearer {issue_token(uid)}"}
+    data["extra_user_ids"] = []
     yield data
     # Remove all test-created rows, including audited events, before accounts.
     with engine.begin() as db:
-        ids = [admin,guest,other,member]
+        ids = [admin,guest,other,member] + data["extra_user_ids"]
+        pigeon_ids = db.execute(text("""SELECT p.id FROM pigeons p JOIN lofts l ON l.id=p.loft_id
+            WHERE l.user_id=ANY(:ids)"""), {"ids": ids}).scalars().all()
         db.execute(text("DELETE FROM audit_logs WHERE actor_id = ANY(:ids)"), {"ids":ids})
         db.execute(text("DELETE FROM messenger_account_links WHERE user_id = ANY(:ids)"), {"ids":ids})
         db.execute(text("""DELETE FROM guest_arrival_verifications WHERE verified_by = ANY(:ids)"""), {"ids":ids})
@@ -65,18 +68,17 @@ def scenario(monkeypatch):
         db.execute(text("""DELETE FROM clocking_event_sources WHERE event_id IN (SELECT id FROM clocking_events WHERE submitted_by = ANY(:ids) OR device_id=:device)"""), {"ids":ids,"device":device})
         db.execute(text("""DELETE FROM clocking_events WHERE submitted_by = ANY(:ids) OR device_id=:device"""), {"ids":ids,"device":device})
         db.execute(text("""DELETE FROM qr_tokens WHERE pigeon_id = ANY(:ids)"""),
-                   {"ids":[pigeon_guest,pigeon_other,pigeon_member]})
+                   {"ids":pigeon_ids})
         db.execute(text("""DELETE FROM race_entries WHERE pigeon_id = ANY(:ids)"""),
-                   {"ids":[pigeon_guest,pigeon_other,pigeon_member]})
+                   {"ids":pigeon_ids})
         db.execute(text("DELETE FROM races WHERE created_by = :id"), {"id":admin})
         db.execute(text("DELETE FROM club_memberships WHERE club_id IN (SELECT id FROM clubs WHERE created_by=:id)"), {"id":admin})
         db.execute(text("DELETE FROM clubs WHERE created_by=:id"), {"id":admin})
         db.execute(text("DELETE FROM devices WHERE id=:id"), {"id":device})
         db.execute(text("DELETE FROM rfid_rings WHERE id=:id"), {"id":ring})
         db.execute(text("DELETE FROM pigeons WHERE id = ANY(:ids)"),
-                   {"ids":[pigeon_guest,pigeon_other,pigeon_member]})
-        db.execute(text("DELETE FROM lofts WHERE id = ANY(:ids)"),
-                   {"ids":[loft_guest,loft_other,loft_member]})
+                   {"ids":pigeon_ids})
+        db.execute(text("DELETE FROM lofts WHERE user_id = ANY(:ids)"), {"ids":ids})
         db.execute(text("DELETE FROM users WHERE id = ANY(:ids)"), {"ids":ids})
     engine.dispose()
     database._engine = None
@@ -132,6 +134,131 @@ def test_club_creation_membership_and_access(scenario):
         actions = db.execute(text("SELECT action FROM audit_logs WHERE actor_id=:id AND entity_type='club'"),
                              {"id": s["admin"]}).scalars().all()
     assert sorted(actions) == ["club.created"] + ["club.member_added"] * 3
+
+
+def test_race_club_isolation_and_legacy_ownership(scenario):
+    s = scenario
+    client = s["client"]
+    admin = s["headers"](s["admin"])
+    outsider = s["headers"](s["other"])
+    with s["engine"].begin() as db:
+        db.execute(text("UPDATE users SET role_code='president' WHERE id=:id"), {"id": s["other"]})
+    legacy = make_race(s)
+    assert client.post(f"/races/{legacy}/activate", headers=outsider).status_code == 403
+    created = client.post("/clubs", headers=admin, json={"name": "Race Test Club"})
+    assert created.status_code == 201, created.text
+    club = created.json()["id"]
+    race_payload = {"name": "Scoped race", "release_latitude": 10, "release_longitude": 125.6}
+    assert client.post("/races", headers=outsider, json=race_payload).status_code == 403
+    scoped = client.post("/races", headers=admin, json=race_payload)
+    assert scoped.status_code == 201, scoped.text
+    race = scoped.json()["id"]
+    assert scoped.json()["club_id"] == club
+    assert client.get("/races", headers=outsider).json() == []
+    assert {r["id"] for r in client.get("/races", headers=admin).json()} == {legacy, race}
+    for suffix in ("open", "activate", "close", "finalize"):
+        assert client.post(f"/races/{race}/{suffix}", headers=outsider).status_code == 403
+    for path in (f"/races/{race}/entries", f"/races/{race}/leaderboard-preview",
+                 f"/clocking/events?race_id={race}"):
+        assert client.get(path, headers=outsider).status_code == 403
+    assert client.post(f"/races/{race}/open", headers=admin).status_code == 200
+    entry_payload = {"pigeon_id": str(s["pigeon_guest"]), "expected_method": "QR"}
+    assert client.post(f"/races/{race}/entries", headers=outsider, json=entry_payload).status_code == 403
+    assert client.post(f"/races/{race}/entries", headers=admin, json=entry_payload).status_code == 422
+    assert client.post(f"/clubs/{club}/members", headers=admin,
+                       json={"user_id": str(s["guest"])}).status_code == 201
+    entry = register(s, race, s["pigeon_guest"], "QR")
+    assert client.post("/clocking/qr/tokens", headers=outsider,
+                       json={"entry_id": entry}).status_code == 403
+    token = client.post("/clocking/qr/tokens", headers=admin, json={"entry_id": entry})
+    assert token.status_code == 201, token.text
+    assert client.post(f"/races/{race}/activate", headers=admin).status_code == 200
+    scan = client.post("/clocking/qr/scans", headers=s["headers"](s["guest"]), json={
+        "entry_id": entry, "token": token.json()["token"], "idempotency_key": str(uuid4())})
+    assert scan.status_code == 202, scan.text
+    event = scan.json()["event_id"]
+    assert client.get(f"/clocking/events/{event}/source", headers=outsider).status_code == 403
+    assert client.get(f"/clocking/events/{event}/source", headers=admin).status_code == 200
+    assert client.post(f"/clocking/events/{event}/review", headers=outsider,
+                       json={"decision": "approve", "reason": "Test review evidence"}).status_code == 403
+    assert client.post(f"/clocking/events/{event}/guest-verification", headers=outsider, json={
+        "decision": "confirmed", "ring_number_seen": "TEST", "evidence_note": "Test physical evidence"
+    }).status_code == 403
+    assert client.post("/clocking/rfid/simulate", headers=outsider, json={
+        "race_id": race, "device_id": str(s["device"]), "rfid_uid": "TEST",
+        "idempotency_key": str(uuid4())}).status_code == 403
+
+
+def test_club_participant_asset_management(scenario):
+    s = scenario
+    c = s["client"]
+    admin = s["headers"](s["admin"])
+    outsider = s["headers"](s["other"])
+    with s["engine"].begin() as db:
+        db.execute(text("UPDATE users SET role_code='president' WHERE id=:id"), {"id": s["other"]})
+    club = c.post("/clubs", headers=admin, json={"name": "Asset Test Club"}).json()["id"]
+    for uid in (s["member"], s["guest"]):
+        assert c.post(f"/clubs/{club}/members", headers=admin,
+                      json={"user_id": str(uid)}).status_code == 201
+    payload = {"full_name": "New Member", "email": f"{uuid4()}@example.test",
+               "password": "test-member-password", "role": "member"}
+    assert c.post("/participants", headers=outsider, json=payload).status_code == 403
+    created = c.post("/participants", headers=admin, json=payload)
+    assert created.status_code == 201, created.text
+    uid = created.json()["id"]
+    s["extra_user_ids"].append(UUID(uid))
+    for path in ("/participants", "/lofts", "/pigeons"):
+        assert c.get(path, headers=outsider).status_code == 403
+        listed = c.get(path, headers=admin)
+        assert listed.status_code == 200, listed.text
+        assert all("password_hash" not in row for row in listed.json())
+    assert uid in [row["id"] for row in c.get("/participants", headers=admin).json()]
+    edit_user = {"full_name": "Updated Member", "phone": "+639000000001"}
+    assert c.put(f"/participants/{uid}", headers=outsider, json=edit_user).status_code == 403
+    assert c.put(f"/participants/{uid}", headers=admin, json=edit_user).status_code == 200
+    loft = c.post("/lofts", headers=admin, json={"user_id": uid, "name": "New Loft",
+                  "latitude": 9.7, "longitude": 125.4})
+    assert loft.status_code == 201, loft.text
+    loft_id = loft.json()["id"]
+    pigeon_payload = {"loft_id": loft_id, "official_ring_number": f"TEST-{uuid4()}"}
+    assert c.post("/pigeons", headers=admin, json=pigeon_payload).status_code == 422
+    assert c.post(f"/lofts/{loft_id}/verify", headers=outsider).status_code == 403
+    assert c.post(f"/lofts/{loft_id}/verify", headers=admin).status_code == 200
+    assert c.post("/pigeons", headers=outsider, json=pigeon_payload).status_code == 403
+    pigeon = c.post("/pigeons", headers=admin, json=pigeon_payload)
+    assert pigeon.status_code == 201, pigeon.text
+    pid = pigeon.json()["id"]
+    pigeon_edit = {"name": "Test Bird", "status": "active"}
+    assert c.put(f"/pigeons/{pid}", headers=outsider, json=pigeon_edit).status_code == 403
+    assert c.put(f"/pigeons/{pid}", headers=admin, json=pigeon_edit).status_code == 200
+    loft_edit = {"name": "Moved Loft", "latitude": 9.6, "longitude": 125.4}
+    assert c.put(f"/lofts/{loft_id}", headers=outsider, json=loft_edit).status_code == 403
+    changed = c.put(f"/lofts/{loft_id}", headers=admin, json=loft_edit)
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["verified"] is False
+    assert c.post(f"/lofts/{loft_id}/verify", headers=admin).status_code == 200
+    race = make_race(s)
+    register(s, race, s["pigeon_guest"], "QR")
+    busy_loft = {"name": "Busy Loft", "latitude": 9.5, "longitude": 125.5}
+    assert c.put(f"/lofts/{s['loft_guest']}", headers=admin, json=busy_loft).status_code == 409
+    assert c.put(f"/pigeons/{s['pigeon_guest']}", headers=admin,
+                 json={"name": "Busy Bird", "status": "retired"}).status_code == 409
+    assert c.post(f"/devices/{s['device']}/provision", headers=outsider).status_code == 403
+    assert c.post(f"/devices/{s['device']}/provision", headers=admin).status_code == 200
+    link = {"page_id": "test-page", "sender_psid": str(uuid4()), "user_id": str(s["guest"])}
+    assert c.post("/clocking/messenger/links", headers=outsider, json=link).status_code == 403
+    assert c.post("/clocking/messenger/links", headers=admin, json=link).status_code == 201
+    issued = c.post("/clocking/qr/tokens", headers=admin, json={"entry_id":
+        c.get(f"/races/{race}/entries", headers=admin).json()[0]["id"]})
+    assert issued.status_code == 201
+    assert c.post(f"/races/{race}/activate", headers=admin).status_code == 200
+    with s["engine"].begin() as db:
+        db.execute(text("DELETE FROM club_memberships WHERE club_id=:club AND user_id=:user"),
+                   {"club": club, "user": s["guest"]})
+    scan = c.post("/clocking/qr/scans", headers=s["headers"](s["guest"]), json={
+        "entry_id": issued.json()["entry_id"], "token": issued.json()["token"],
+        "idempotency_key": str(uuid4())})
+    assert scan.status_code == 403
 
 
 def make_race(s):

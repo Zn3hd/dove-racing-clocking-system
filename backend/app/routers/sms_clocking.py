@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..club_access import check_entry_membership
 from .clocking import QRScanRequest, submit_qr_scan
 
 router = APIRouter(prefix="/clocking/sms", tags=["sms-clocking"])
@@ -51,6 +52,7 @@ async def sms_webhook(request: Request,
     fingerprint = hashlib.sha256(raw).hexdigest()
     # One phone number may be shared across users; refuse ambiguous matches.
     with db.begin():
+        check_entry_membership(db, payload.entry_id)
         rows = db.execute(text("""
             SELECT u.id,u.role_code,u.status FROM race_entries e
             JOIN lofts l ON l.id=e.loft_id

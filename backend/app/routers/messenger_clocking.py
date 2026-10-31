@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from ..auth import require_admin
 from ..database import get_db
+from ..club_access import check_user_admin, check_entry_membership
 from .clocking import QRScanRequest, submit_qr_scan
 
 router = APIRouter(prefix="/clocking/messenger", tags=["messenger-clocking"])
@@ -32,6 +33,7 @@ class LinkMessengerAccount(BaseModel):
 def link_account(payload: LinkMessengerAccount, actor: dict = Depends(require_admin),
                  db: Session = Depends(get_db)):
     with db.begin():
+        check_user_admin(db, actor, payload.user_id)
         user = db.execute(text("SELECT role_code,status FROM users WHERE id=:id"),
                           {"id":payload.user_id}).mappings().first()
         if not user or user["role_code"] != "guest" or user["status"] != "active":
@@ -127,6 +129,11 @@ async def messenger_webhook(request: Request, db: Session = Depends(get_db),
                     WHERE l.page_id=:page AND l.sender_psid=:psid
                 """), {"page":allowed_page,"psid":psid}).mappings().first()
                 if not actor or actor["status"] != "active" or actor["role_code"] != "guest":
+                    ignored += 1
+                    continue
+                try:
+                    check_entry_membership(db, entry_id)
+                except HTTPException:
                     ignored += 1
                     continue
                 prior = db.execute(text("""

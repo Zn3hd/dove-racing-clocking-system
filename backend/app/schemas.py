@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 class RaceCreate(BaseModel):
+    club_id: UUID | None = None
     name: str = Field(min_length=1, max_length=200)
     release_latitude: float = Field(ge=-90, le=90)
     release_longitude: float = Field(ge=-180, le=180)

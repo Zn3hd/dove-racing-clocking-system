@@ -23,16 +23,19 @@ class FirstAdminRequest(BaseModel):
     password: str = Field(min_length=12, max_length=256)
 
 
-@router.post("/first-admin", status_code=201)
-def first_admin(
-    payload: FirstAdminRequest,
-    x_setup_secret: str | None = Header(default=None),
-    db: Session = Depends(get_db),
-):
+def require_setup_secret(x_setup_secret: str | None = Header(default=None)) -> None:
+    """Reject disabled or unauthorized setup before opening a database session."""
     secret = os.getenv("ADMIN_BOOTSTRAP_SECRET", "")
-    if len(secret) < 48 or not x_setup_secret or not hmac.compare_digest(secret, x_setup_secret):
+    if (len(secret) < 48 or not x_setup_secret
+            or not hmac.compare_digest(secret.encode("utf-8"), x_setup_secret.encode("utf-8"))):
         raise HTTPException(status_code=404, detail="Not found")
 
+
+@router.post("/first-admin", status_code=201, dependencies=[Depends(require_setup_secret)])
+def first_admin(
+    payload: FirstAdminRequest,
+    db: Session = Depends(get_db),
+):
     name = payload.full_name.strip()
     email = payload.email.strip().lower()
     if len(name) < 2 or "@" not in email:

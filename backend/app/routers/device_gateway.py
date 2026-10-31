@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from ..auth import require_admin
 from ..database import get_db
+from ..club_access import check_loft_admin, check_entry_membership
 
 router=APIRouter(prefix="/devices",tags=["device-gateway"])
 
@@ -34,6 +35,11 @@ def provision(device_id: UUID, actor: dict=Depends(require_admin),
               db: Session=Depends(get_db)):
     secret=secrets.token_urlsafe(48)
     with db.begin():
+        loft = db.execute(text("SELECT loft_id FROM devices WHERE id=:id"),
+                          {"id": device_id}).scalar_one_or_none()
+        if loft is None:
+            raise HTTPException(404, "Active device not found")
+        check_loft_admin(db, actor, loft)
         device=db.execute(text("SELECT id FROM devices WHERE id=:id AND status='active' FOR UPDATE"),
                           {"id":device_id}).scalar_one_or_none()
         if device is None:
@@ -75,6 +81,9 @@ def receive_arrival(device_id: UUID,payload: GatewayArrival,
         if prior:
             if prior["payload_hash"]!=fingerprint:
                 raise HTTPException(409,"Message identifier reused with different content")
+            prior_entry = db.execute(text("SELECT entry_id FROM clocking_events WHERE id=:id"),
+                                     {"id": prior["event_id"]}).scalar_one()
+            check_entry_membership(db, prior_entry)
             return {"event_id":prior["event_id"],"duplicate_request":True,
                     "status":"pending","official_result_created":False}
         race=db.execute(text("""
@@ -90,6 +99,7 @@ def receive_arrival(device_id: UUID,payload: GatewayArrival,
         """),{"race":payload.race_id,"loft":device["loft_id"],"ring":payload.ring_uid}).scalar_one_or_none()
         if entry is None:
             raise HTTPException(404,"Registered ring not found at device loft")
+        check_entry_membership(db, entry)
         now=datetime.now(timezone.utc)
         if now<=race["actual_release_at"]:
             raise HTTPException(409,"Race has not been released")

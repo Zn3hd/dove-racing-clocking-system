@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from ..auth import require_admin
+from ..club_access import require_event_admin
 from ..database import get_db
 
 router = APIRouter(prefix="/clocking", tags=["official-verification"])
@@ -21,7 +21,7 @@ class GuestVerification(BaseModel):
 
 @router.post("/events/{event_id}/guest-verification", status_code=201)
 def verify_guest(event_id: UUID, payload: GuestVerification,
-                 actor: dict=Depends(require_admin),
+                 actor: dict=Depends(require_event_admin),
                  db: Session=Depends(get_db)):
     with db.begin():
         event=db.execute(text("""

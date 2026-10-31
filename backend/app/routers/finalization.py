@@ -8,14 +8,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from ..auth import require_admin
+from ..club_access import require_race_admin
 from ..database import get_db
 
 router = APIRouter(prefix="/races", tags=["finalization"])
 
 @router.post("/{race_id}/close")
 def close_race(race_id: UUID, db: Session = Depends(get_db),
-               actor: dict = Depends(require_admin)):
+               actor: dict = Depends(require_race_admin)):
     with db.begin():
         status = db.execute(text("SELECT status FROM races WHERE id=:id FOR UPDATE"),
                             {"id":race_id}).scalar_one_or_none()
@@ -32,7 +32,7 @@ def close_race(race_id: UUID, db: Session = Depends(get_db),
 
 @router.post("/{race_id}/finalize")
 def finalize_race(race_id: UUID, db: Session = Depends(get_db),
-                  actor: dict = Depends(require_admin)):
+                  actor: dict = Depends(require_race_admin)):
     """Fail closed until trustworthy hardware/guest evidence is implemented.
 
     The current RFID route is explicitly a simulator and QR scan is a

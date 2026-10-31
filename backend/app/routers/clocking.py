@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import current_user, require_admin
 from ..database import get_db
+from ..club_access import check_race_admin, require_race_admin, require_event_admin, check_entry_membership
 
 router = APIRouter(prefix="/clocking", tags=["clocking"])
 
@@ -61,6 +62,8 @@ def issue_qr_token(payload: QRTokenRequest, actor: dict = Depends(require_admin)
         """), {"entry": payload.entry_id}).mappings().first()
         if not entry:
             raise HTTPException(404, "Entry not found")
+        check_race_admin(db, actor, entry["race_id"])
+        check_entry_membership(db, payload.entry_id)
         if (entry["expected_method"] != "QR" or entry["role_code"] != "guest"
                 or entry["status"] != "registered" or entry["race_status"] not in ("open", "active")):
             raise HTTPException(409, "Entry is not eligible for a guest clocking token")
@@ -101,6 +104,7 @@ def submit_qr_scan(payload: QRScanRequest, actor: dict = Depends(current_user),
             raise HTTPException(404, "Entry not found")
         if entry["user_id"] != actor["id"]:
             raise HTTPException(403, "This entry belongs to another account")
+        check_entry_membership(db, payload.entry_id)
         if (entry["expected_method"] != "QR" or entry["status"] != "registered"
                 or entry["race_status"] != "active" or entry["actual_release_at"] is None):
             raise HTTPException(409, "Entry is not accepting guest clocking scans")
@@ -144,6 +148,7 @@ def simulate_rfid(payload: RFIDSimulatorRequest, actor: dict = Depends(require_a
                   db: Session = Depends(get_db)):
     event_id = uuid4()
     with db.begin():
+        check_race_admin(db, actor, payload.race_id)
         race = db.execute(text("""
             SELECT status,actual_release_at FROM races WHERE id=:race FOR UPDATE
         """), {"race":payload.race_id}).mappings().first()
@@ -159,6 +164,7 @@ def simulate_rfid(payload: RFIDSimulatorRequest, actor: dict = Depends(require_a
                "uid":payload.rfid_uid}).mappings().first()
         if not row:
             raise HTTPException(404, "No matching active device/ring/race entry")
+        check_entry_membership(db, row["entry_id"])
         existing = db.execute(text("""
             SELECT c.id,c.entry_id,c.method,c.submitted_by,
                    CASE WHEN EXISTS (
@@ -188,7 +194,7 @@ def simulate_rfid(payload: RFIDSimulatorRequest, actor: dict = Depends(require_a
 
 
 @router.get("/events")
-def list_pending_events(race_id: UUID, actor: dict = Depends(require_admin),
+def list_pending_events(race_id: UUID, actor: dict = Depends(require_race_admin),
                         db: Session = Depends(get_db)):
     rows = db.execute(text("""
         SELECT c.id,c.entry_id,c.method,c.recorded_at,c.received_at,c.status,
@@ -206,7 +212,7 @@ class EventReviewRequest(BaseModel):
 
 @router.post("/events/{event_id}/review")
 def review_event(event_id: UUID, payload: EventReviewRequest,
-                 actor: dict = Depends(require_admin), db: Session = Depends(get_db)):
+                 actor: dict = Depends(require_event_admin), db: Session = Depends(get_db)):
     """Record human review, but do not produce or certify official results."""
     with db.begin():
         event = db.execute(text("""

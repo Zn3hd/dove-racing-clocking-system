@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from ..auth import require_admin
+from ..club_access import require_race_admin
 from ..database import get_db
 from ..calculations import speed_mpm, convert_speed, leaderboard
 
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/races", tags=["results-preview"])
 
 @router.get("/{race_id}/leaderboard-preview")
 def preview_leaderboard(race_id: UUID, db: Session = Depends(get_db),
-                        actor: dict = Depends(require_admin)):
+                        actor: dict = Depends(require_race_admin)):
     race = db.execute(text("""
         SELECT id,name,status,actual_release_at,minimum_speed_mpm,
                guest_ranking_mode,display_speed_unit

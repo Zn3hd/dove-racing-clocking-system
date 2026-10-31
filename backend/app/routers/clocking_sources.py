@@ -9,14 +9,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ..auth import require_admin
+from ..club_access import require_event_admin
 from ..database import get_db
 
 router = APIRouter(prefix="/clocking", tags=["clocking-provenance"])
 
 
 @router.get("/events/{event_id}/source")
-def get_clocking_source(event_id: UUID, actor: dict = Depends(require_admin),
+def get_clocking_source(event_id: UUID, actor: dict = Depends(require_event_admin),
                         db: Session = Depends(get_db)):
     row = db.execute(text("""
         SELECT c.id AS event_id, c.method AS legacy_method, c.recorded_at,
