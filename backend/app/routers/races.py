@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..schemas import RaceCreate
+from ..schemas import RaceCreate, ValidationPolicy
 from ..auth import require_admin
 from ..club_access import require_race_admin
 
@@ -27,26 +27,49 @@ def create_race(payload: RaceCreate, db: Session = Depends(get_db), actor: dict 
                 raise HTTPException(403, "Club administrator required")
         db.execute(text("""
             INSERT INTO races(id,club_id,name,release_latitude,release_longitude,scheduled_release_at,
-              minimum_speed_mpm,display_speed_unit,guest_ranking_mode,status,created_by)
-            VALUES (:id,:club,:name,:lat,:lon,:scheduled,:minimum,:unit,:mode,'draft',:actor)
+              minimum_speed_mpm,maximum_speed_mpm,clock_tolerance_seconds,display_speed_unit,guest_ranking_mode,status,created_by)
+            VALUES (:id,:club,:name,:lat,:lon,:scheduled,:minimum,:maximum,:tolerance,:unit,:mode,'draft',:actor)
         """), {"id":rid,"club":club_id,"name":payload.name,"lat":payload.release_latitude,
                  "lon":payload.release_longitude,"scheduled":payload.scheduled_release_at,
                  "minimum":payload.minimum_speed_mpm,"unit":payload.display_speed_unit,
+                 "maximum":payload.maximum_speed_mpm,"tolerance":payload.clock_tolerance_seconds,
                  "mode":payload.guest_ranking_mode,"actor":actor["id"]})
         db.execute(text("""INSERT INTO audit_logs(actor_id,action,entity_type,entity_id,after_state)
             VALUES (:actor,'race.created','race',:id, jsonb_build_object('name',CAST(:name AS text)))"""),
             {"actor":actor["id"],"id":rid,"name":payload.name})
-    return {"id":rid,"club_id":club_id,"name":payload.name,"status":"draft","guest_ranking_mode":payload.guest_ranking_mode}
+    return {"id":rid,"club_id":club_id,"name":payload.name,"status":"draft","guest_ranking_mode":payload.guest_ranking_mode,
+            "maximum_speed_mpm":payload.maximum_speed_mpm,"clock_tolerance_seconds":payload.clock_tolerance_seconds}
 
 @router.get("")
 def list_races(db: Session = Depends(get_db), actor: dict = Depends(require_admin)):
     rows = db.execute(text("""SELECT r.id,r.club_id,r.name,r.status,r.guest_ranking_mode,
-        r.minimum_speed_mpm,r.display_speed_unit FROM races r
+        r.minimum_speed_mpm,r.maximum_speed_mpm,r.clock_tolerance_seconds,r.display_speed_unit FROM races r
         WHERE (r.club_id IS NULL AND r.created_by=:actor)
            OR EXISTS(SELECT 1 FROM club_memberships m WHERE m.club_id=r.club_id
                      AND m.user_id=:actor AND m.club_role='admin')
         ORDER BY r.created_at DESC LIMIT 100"""), {"actor": actor["id"]})
     return [dict(row._mapping) for row in rows]
+
+
+@router.put('/{race_id}/validation-policy')
+def set_validation_policy(race_id: UUID, payload: ValidationPolicy,
+                          db: Session = Depends(get_db), actor: dict = Depends(require_race_admin)):
+    with db.begin():
+        race = db.execute(text('SELECT status,minimum_speed_mpm FROM races WHERE id=:id FOR UPDATE'),
+                          {'id': race_id}).mappings().one()
+        if race['status'] != 'draft':
+            raise HTTPException(409, 'Validation policy can only change before registration opens')
+        if payload.maximum_speed_mpm <= float(race['minimum_speed_mpm']):
+            raise HTTPException(422, 'Maximum speed must exceed minimum speed')
+        db.execute(text('''UPDATE races SET maximum_speed_mpm=:maximum,clock_tolerance_seconds=:tolerance
+            WHERE id=:id'''), {'id': race_id, 'maximum': payload.maximum_speed_mpm,
+                              'tolerance': payload.clock_tolerance_seconds})
+        db.execute(text('''INSERT INTO audit_logs(actor_id,action,entity_type,entity_id,after_state)
+            VALUES (:actor,'race.validation_policy_updated','race',:id,
+             jsonb_build_object('maximum_speed_mpm',CAST(:maximum AS numeric),'clock_tolerance_seconds',CAST(:tolerance AS integer)))'''),
+            {'actor': actor['id'], 'id': race_id, 'maximum': payload.maximum_speed_mpm,
+             'tolerance': payload.clock_tolerance_seconds})
+    return {'race_id': race_id, **payload.model_dump()}
 
 @router.post("/{race_id}/open")
 def open_race(race_id: UUID, db: Session = Depends(get_db), actor: dict = Depends(require_race_admin)):

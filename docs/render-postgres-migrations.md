@@ -15,7 +15,7 @@ python scripts/run_migrations.py && uvicorn app.main:app --host 0.0.0.0 --port $
 
 Keep the Build Command as `pip install -r requirements.txt`. This will trigger
 a redeployment. Watch the Render logs for `Applied: 001_schema.sql` through
-`Applied: 009_reader_adapters.sql` and `Migrations complete`. On subsequent
+`Applied: 010_clocking_validation.sql` and `Migrations complete`. On subsequent
 starts it verifies the recorded checksums and skips applied files.
 
 The runner uses a PostgreSQL session advisory lock to prevent simultaneous

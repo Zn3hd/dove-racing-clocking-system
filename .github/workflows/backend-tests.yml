@@ -56,6 +56,7 @@ jobs:
               conn.execute(Path("sql/007_messenger_links.sql").read_text())
               conn.execute(Path("sql/008_clubs.sql").read_text())
               conn.execute(Path("sql/009_reader_adapters.sql").read_text())
+              conn.execute(Path("sql/010_clocking_validation.sql").read_text())
           PY
       - name: Compile Python source (catch syntax errors)
         run: python -m compileall -q app tests

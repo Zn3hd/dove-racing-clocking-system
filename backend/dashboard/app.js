@@ -285,6 +285,10 @@ function showView(view) {
 
 function resetLive(text) {
   $("#live-rows").replaceChildren();
+  $("#validation-rows").replaceChildren();
+  $("#validation-summary").textContent = "Select a race to inspect clocking evidence.";
+  $("#validation-empty").hidden = false;
+  $("#validation-empty").textContent = "No validation data loaded.";
   $("#live-state").textContent = text;
   $("#live-state").hidden = false;
   $("#live-total").textContent = "-";
@@ -328,6 +332,20 @@ async function loadRaces() {
 }
 
 function renderLive(data) {
+  $("#validation-summary").textContent = `${data.suspicious_events} flagged · ${data.repeat_scans} repeat scans · ${data.simulated_events} simulated · Maximum ${data.maximum_speed_mpm} m/min`;
+  const flaggedBody = $("#validation-rows");
+  flaggedBody.replaceChildren();
+  for (const item of data.flagged_events) {
+    const tr = element("tr");
+    const flags = element("td");
+    for (const flag of item.blocking_flags) flags.append(element("div", "validation-flag", flag.replaceAll("_", " ")));
+    tr.append(element("td", "person-name", item.official_ring_number), flags,
+      element("td", "", item.speed_mpm === null ? "Not calculable" : `${Number(item.speed_mpm).toFixed(2)} m/min`),
+      element("td", "", new Date(item.received_at).toLocaleString()));
+    flaggedBody.append(tr);
+  }
+  $("#validation-empty").hidden = data.flagged_events.length > 0;
+  $("#validation-empty").textContent = "No blocking flags detected. This does not certify official timing.";
   $("#live-total").textContent = String(data.registered_entries);
   $("#live-arrived").textContent = String(data.arrived_entries);
   $("#live-status").textContent = data.race_status;

@@ -39,6 +39,14 @@ criteria and have not been validated by a full repository and deployment audit.
 
 ## Next milestones, in order
 
+### Clocking validation and reliability
+
+Migration 010 introduces configurable race speed/timestamp policy, shared
+suspicious-event assessments, duplicate-scan warnings, ranking exclusion before
+first-arrival selection, and database-level simulator/official-result guards.
+The live dashboard shows flagged evidence separately. See `clocking-validation.md`.
+Physical reader connection remains a later hardware acceptance milestone.
+
 ### Updated RFID architecture
 
 Confirmed direction: a separate hardware-independent Python gateway for

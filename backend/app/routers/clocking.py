@@ -198,7 +198,9 @@ def list_pending_events(race_id: UUID, actor: dict = Depends(require_race_admin)
                         db: Session = Depends(get_db)):
     rows = db.execute(text("""
         SELECT c.id,c.entry_id,c.method,c.recorded_at,c.received_at,c.status,
+               v.blocking_flags,v.warnings AS validation_warnings,v.is_simulated,
                c.metadata FROM clocking_events c
+        JOIN clocking_event_validation v ON v.event_id=c.id
         JOIN race_entries e ON e.id=c.entry_id
         WHERE e.race_id=:race ORDER BY c.received_at DESC LIMIT 500
     """), {"race":race_id})

@@ -4,3 +4,5 @@
 /* Live provisional race view */
 .sidebar nav{display:grid;gap:8px}.nav-item:not(.selected){background:transparent;border-left-color:transparent;color:#a9bfca}.live-controls{display:flex;gap:14px;align-items:flex-end;margin:0 0 14px}.live-controls label{flex:1;max-width:600px}.race-status{font-size:24px!important;text-transform:capitalize}.live-controls select{font-size:13px}#live-view .directory-header{padding-bottom:20px}#live-feed-state{max-width:100%;overflow-wrap:anywhere}#live-view .directory-footer{white-space:normal}
 @media(max-width:760px){.sidebar{flex-wrap:wrap;gap:15px}.sidebar nav{display:flex;width:100%;gap:8px}.sidebar nav .nav-item{width:auto;flex:1;padding:9px 12px;text-align:center;display:block}.live-controls{gap:8px}.live-controls button{font-size:11px;padding:12px}.race-status{font-size:17px!important}}
+
+.validation-card{margin-top:24px}.validation-flag{color:#a54250;white-space:normal;min-width:180px;line-height:1.6}.validation-card .directory-footer{line-height:1.7;white-space:normal}

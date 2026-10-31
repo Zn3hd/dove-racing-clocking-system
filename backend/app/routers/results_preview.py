@@ -24,7 +24,7 @@ def live_race(race_id: UUID, db: Session = Depends(get_db),
     Automatic is a device's declared capture mode, never hardware attestation.
     Unreviewed operator/unknown captures and manual claims are not auto-ranked.
     """
-    race = db.execute(text('''SELECT id,name,status,actual_release_at,minimum_speed_mpm,
+    race = db.execute(text('''SELECT id,name,status,actual_release_at,minimum_speed_mpm,maximum_speed_mpm,
         guest_ranking_mode,display_speed_unit FROM races WHERE id=:id'''),
         {'id': race_id}).mappings().one()
     total = db.execute(text("SELECT count(*) FROM race_entries WHERE race_id=:id AND status='registered'"),
@@ -35,8 +35,10 @@ def live_race(race_id: UUID, db: Session = Depends(get_db),
             e.id AS entry_id,e.pigeon_id,e.loft_id,e.distance_meters,e.expected_method AS clocking_method,
             p.official_ring_number,u.full_name AS owner_name,c.id AS event_id,c.recorded_at AS arrival_at,
             c.device_id,c.metadata,gv.decision AS physical_verification,
+            v.warnings AS validation_warnings,v.is_simulated,
             EXISTS(SELECT 1 FROM clocking_reviews cr WHERE cr.event_id=c.id AND cr.decision='approve') AS reviewed
             FROM race_entries e JOIN clocking_events c ON c.entry_id=e.id
+            JOIN clocking_event_validation v ON v.event_id=c.id AND cardinality(v.blocking_flags)=0
             JOIN pigeons p ON p.id=e.pigeon_id JOIN lofts l ON l.id=e.loft_id JOIN users u ON u.id=l.user_id
             LEFT JOIN guest_arrival_verifications gv ON gv.event_id=c.id
             WHERE e.race_id=:race AND e.status='registered' AND c.status IN ('pending','valid')
@@ -58,9 +60,10 @@ def live_race(race_id: UUID, db: Session = Depends(get_db),
                 'flight_duration_seconds': (event['arrival_at'] - race['actual_release_at']).total_seconds(),
                 'qualifying_status': 'qualified' if velocity >= float(race['minimum_speed_mpm']) else 'below_minimum',
                 'verification_status': 'provisional', 'timestamp_policy': 'server_receipt',
-                'capture_mode': 'simulated' if metadata.get('simulated') else metadata.get('capture_mode', 'unknown'),
+                'capture_mode': 'simulated' if event['is_simulated'] else metadata.get('capture_mode', 'unknown'),
                 'offline_buffered': bool(metadata.get('offline_buffered', False)),
                 'device_recorded_at': metadata.get('device_recorded_at'),
+                'validation_warnings': event['validation_warnings'],
                 'physical_verification': event['physical_verification'] or 'not_recorded'})
     ranked = leaderboard(rows, race['guest_ranking_mode'])
     ranks = {row['entry_id']: (row['rank'], row['leaderboard']) for row in ranked}
@@ -70,13 +73,35 @@ def live_race(race_id: UUID, db: Session = Depends(get_db),
             'combined' if race['guest_ranking_mode'] == 'combined' else
             ('guest' if row['clocking_method'] == 'QR' else 'member')))
     rows.sort(key=lambda row: (row['leaderboard'], row['rank'] is None, row['rank'] or 0, row['arrival_order']))
+    validation = validation_summary(db, race_id)
     return {'race_id': race_id, 'race_name': race['name'], 'race_status': race['status'],
+            'maximum_speed_mpm': float(race['maximum_speed_mpm']), **validation,
             'release_at': race['actual_release_at'], 'official': False,
             'updated_at': datetime.now(timezone.utc), 'speed_unit': race['display_speed_unit'],
             'registered_entries': total, 'arrived_entries': len(rows), 'limit': 1000,
             'possibly_truncated': len(rows) == 1000, 'entries': rows,
             'note': 'Provisional server-receipt timing. Automatic mode is declared, not verified. '
                     'Operator/manual captures require review; simulator scans are labeled. Official finalization is disabled.'}
+
+
+def validation_summary(db, race_id):
+    counts = db.execute(text('''SELECT count(*) FILTER(WHERE cardinality(blocking_flags)>0) AS suspicious_events,
+        count(*) FILTER(WHERE 'repeat_scan'=ANY(warnings)) AS repeat_scans,
+        count(*) FILTER(WHERE is_simulated) AS simulated_events
+        FROM clocking_event_validation WHERE race_id=:id'''), {'id': race_id}).mappings().one()
+    flagged = db.execute(text('''SELECT v.event_id,v.entry_id,v.speed_mpm,v.blocking_flags,v.warnings,
+        c.recorded_at,c.received_at,p.official_ring_number FROM clocking_event_validation v
+        JOIN clocking_events c ON c.id=v.event_id JOIN race_entries e ON e.id=v.entry_id
+        JOIN pigeons p ON p.id=e.pigeon_id
+        WHERE v.race_id=:id AND cardinality(v.blocking_flags)>0
+        ORDER BY c.received_at DESC,c.id LIMIT 50'''), {'id': race_id}).mappings().all()
+    return {**dict(counts), 'flagged_events': [dict(row) for row in flagged], 'flagged_event_limit': 50}
+
+
+@router.get('/{race_id}/validation')
+def race_validation(race_id: UUID, db: Session = Depends(get_db),
+                    actor: dict = Depends(require_race_admin)):
+    return {'race_id': race_id, 'official': False, **validation_summary(db, race_id)}
 
 @router.get("/{race_id}/leaderboard-preview")
 def preview_leaderboard(race_id: UUID, db: Session = Depends(get_db),
@@ -103,6 +128,7 @@ def preview_leaderboard(race_id: UUID, db: Session = Depends(get_db),
                src.channel AS source_channel
         FROM race_entries e
         JOIN clocking_events c ON c.entry_id=e.id
+        JOIN clocking_event_validation v ON v.event_id=c.id AND cardinality(v.blocking_flags)=0
         LEFT JOIN guest_arrival_verifications gv ON gv.event_id=c.id
         LEFT JOIN clocking_event_sources src ON src.event_id=c.id
         WHERE e.race_id=:race AND e.status='registered'

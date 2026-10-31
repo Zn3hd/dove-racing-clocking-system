@@ -501,13 +501,13 @@ def test_live_race_first_eligible_arrival_and_review_policy(scenario):
     token = c.post('/clocking/qr/tokens', headers=admin, json={'entry_id': guest_entry}).json()['token']
     assert c.post(f'/races/{race}/activate', headers=admin).status_code == 200
     with s['engine'].begin() as db:
-        db.execute(text("UPDATE races SET actual_release_at=now()-interval '5 minutes' WHERE id=:id"), {'id': race})
+        db.execute(text("UPDATE races SET actual_release_at=now()-interval '30 minutes' WHERE id=:id"), {'id': race})
     credentials = c.post(f"/devices/{s['device']}/provision", headers=admin)
     device_headers = {'X-Device-Token': credentials.json()['device_token']}
     endpoint = f"/devices/{s['device']}/arrivals"
     base = {'race_id': race, 'ring_uid': f"RFID-{s['ring']}", 'adapter_type': 'serial',
             'protocol': 'ascii-newline-v1', 'original_scan': f"RFID-{s['ring']}",
-            'device_recorded_at': '2026-01-01T00:00:00+00:00', 'offline_buffered': True}
+            'device_recorded_at': datetime.now(timezone.utc).isoformat(), 'offline_buffered': True}
     operator = c.post(endpoint, headers=device_headers, json={**base,
         'message_id': str(uuid4()), 'capture_mode': 'operator'})
     assert operator.status_code == 202
@@ -549,6 +549,91 @@ def test_live_race_first_eligible_arrival_and_review_policy(scenario):
     assert c.get(live_url, headers=admin).json()['arrived_entries'] == 1
     assert c.post(f'/races/{race}/close', headers=admin).status_code == 200
     assert c.post(f'/races/{race}/finalize', headers=admin).status_code == 409
+
+
+def test_suspicious_clocking_validation_and_simulator_guards(scenario):
+    from sqlalchemy.exc import DBAPIError
+    s = scenario
+    c = s['client']
+    admin = s['headers'](s['admin'])
+    created = c.post('/races', headers=admin, json={'name': 'Validation Race',
+        'release_latitude': 10, 'release_longitude': 125.6, 'maximum_speed_mpm': 2000})
+    assert created.status_code == 201
+    race = created.json()['id']
+    policy = {'maximum_speed_mpm': 3000, 'clock_tolerance_seconds': 5}
+    assert c.put(f'/races/{race}/validation-policy', headers=admin, json=policy).status_code == 200
+    assert c.post(f'/races/{race}/open', headers=admin).status_code == 200
+    assert c.put(f'/races/{race}/validation-policy', headers=admin, json=policy).status_code == 409
+    entry = register(s, race, s['pigeon_member'], 'RFID')
+    assert c.post(f'/races/{race}/activate', headers=admin).status_code == 200
+    with s['engine'].begin() as db:
+        db.execute(text("UPDATE races SET actual_release_at=now()-interval '30 minutes' WHERE id=:id"), {'id': race})
+        db.execute(text('UPDATE race_entries SET distance_meters=30000 WHERE id=:id'), {'id': entry})
+    payload = {'race_id': race, 'device_id': str(s['device']), 'rfid_uid': f"RFID-{s['ring']}",
+               'idempotency_key': str(uuid4())}
+    scan = c.post('/clocking/rfid/simulate', headers=admin, json=payload)
+    assert scan.status_code == 202, scan.text
+    fast_id = scan.json()['event_id']
+    # Disposable fixture only: represent a one-second flight over 30 km.
+    with s['engine'].begin() as db:
+        db.execute(text('''UPDATE clocking_events SET recorded_at=r.actual_release_at+interval '1 second',
+            received_at=r.actual_release_at+interval '1 second' FROM races r
+            WHERE clocking_events.id=:event AND r.id=:race'''), {'event': fast_id, 'race': race})
+    validation_url = f'/races/{race}/validation'
+    assert c.get(validation_url, headers=s['headers'](s['guest'])).status_code == 403
+    flags = c.get(validation_url, headers=admin).json()
+    assert flags['suspicious_events'] == 1
+    assert 'speed_above_maximum' in flags['flagged_events'][0]['blocking_flags']
+    assert c.get(f'/races/{race}/live', headers=admin).json()['entries'] == []
+    assert c.post(f'/clocking/events/{fast_id}/review', headers=admin,
+                  json={'decision': 'approve', 'reason': 'Approval cannot bypass validation'}).status_code == 200
+    assert c.get(f'/races/{race}/leaderboard-preview', headers=admin).json()['entries'] == []
+    repeated = c.post('/clocking/rfid/simulate', headers=admin, json=payload)
+    assert repeated.json()['event_id'] == fast_id
+    assert c.get(validation_url, headers=admin).json()['simulated_events'] == 1
+    later = c.post('/clocking/rfid/simulate', headers=admin,
+                   json={**payload, 'idempotency_key': str(uuid4())})
+    assert later.status_code == 202
+    valid_id = later.json()['event_id']
+    live = c.get(f'/races/{race}/live', headers=admin).json()
+    assert live['entries'][0]['event_id'] == valid_id
+    assert live['entries'][0]['rank'] == 1
+    assert live['repeat_scans'] == 1
+    assert live['suspicious_events'] == 1
+    assert live['entries'][0]['capture_mode'] == 'simulated'
+    with pytest.raises(DBAPIError, match='Simulated'):
+        with s['engine'].begin() as db:
+            db.execute(text("UPDATE clocking_events SET status='valid' WHERE id=:id"), {'id': valid_id})
+    with s['engine'].begin() as db:
+        db.execute(text("UPDATE clocking_events SET metadata='{}'::jsonb WHERE id=:id"), {'id': valid_id})
+        assert db.execute(text("SELECT metadata->>'simulated' FROM clocking_events WHERE id=:id"),
+                          {'id': valid_id}).scalar_one() == 'true'
+    with pytest.raises(DBAPIError, match='Simulated or suspicious'):
+        with s['engine'].begin() as db:
+            db.execute(text('''INSERT INTO race_results(entry_id,accepted_event_id,arrival_at,
+                flight_duration_seconds,distance_meters,speed_mpm,qualifying_status,verification_status)
+                VALUES (:entry,:event,now(),1800,30000,1000,'qualified','approved')'''),
+                {'entry': entry, 'event': valid_id})
+    for observed, expected in [('not-a-date', 'invalid_observed_timestamp'),
+            ('2020-01-01T00:00:00Z', 'observation_not_after_release'),
+            ((datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(), 'observation_in_future')]:
+        with s['engine'].begin() as db:
+            db.execute(text("UPDATE clocking_events SET metadata=jsonb_set(metadata,'{device_recorded_at}',to_jsonb(CAST(:observed AS text))) WHERE id=:id"),
+                       {'id': valid_id, 'observed': observed})
+        flagged = c.get(validation_url, headers=admin).json()['flagged_events']
+        assert expected in next(row for row in flagged if row['event_id'] == valid_id)['blocking_flags']
+        assert c.get(f'/races/{race}/live', headers=admin).json()['entries'] == []
+    # Exact maximum speed is permitted, and a timestamp equal to release is not.
+    with s['engine'].begin() as db:
+        db.execute(text('''UPDATE clocking_events SET metadata='{"simulated":true}'::jsonb,
+            recorded_at=r.actual_release_at+interval '10 minutes',received_at=r.actual_release_at+interval '10 minutes'
+            FROM races r WHERE clocking_events.id=:event AND r.id=:race'''), {'event': valid_id, 'race': race})
+    assert c.get(f'/races/{race}/live', headers=admin).json()['entries'][0]['speed_mpm'] == 3000
+    with s['engine'].begin() as db:
+        db.execute(text('''UPDATE clocking_events SET recorded_at=r.actual_release_at,received_at=r.actual_release_at
+            FROM races r WHERE clocking_events.id=:event AND r.id=:race'''), {'event': valid_id, 'race': race})
+    flagged = c.get(validation_url, headers=admin).json()['flagged_events']
+    assert 'arrival_not_after_release' in next(row for row in flagged if row['event_id'] == valid_id)['blocking_flags']
 
 
 def make_race(s):
@@ -650,6 +735,8 @@ def test_approved_guest_arrival_appears_in_provisional_leaderboard(scenario):
     issued=c.post("/clocking/qr/tokens",headers=admin,json={"entry_id":entry})
     assert issued.status_code==201,issued.text
     assert c.post(f"/races/{race}/activate",headers=admin).status_code==200
+    with s["engine"].begin() as db:
+        db.execute(text("UPDATE races SET actual_release_at=now()-interval '30 minutes' WHERE id=:id"), {"id":race})
     arrival=c.post("/clocking/qr/scans",headers=s["headers"](s["guest"]),json={
         "entry_id":entry,"token":issued.json()["token"],"idempotency_key":str(uuid4())
     })
