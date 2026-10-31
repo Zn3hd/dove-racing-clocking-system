@@ -58,6 +58,54 @@ class ReaderCreate(BaseModel):
         return value.strip()
 
 
+class ReaderHeartbeat(BaseModel):
+    reader_state: Literal['not_probed', 'waiting', 'error'] = 'not_probed'
+    pending_count: int = Field(ge=0, le=1000000000, strict=True)
+    rejected_count: int = Field(ge=0, le=1000000000, strict=True)
+
+
+def authenticated_device(db, device_id, token):
+    if not token or len(token) > 256:
+        raise HTTPException(401, 'Device token required')
+    device = db.execute(text('''SELECT d.id,d.loft_id,d.status,g.secret_hash,g.revoked_at
+        FROM devices d JOIN device_gateway_credentials g ON g.device_id=d.id
+        WHERE d.id=:id FOR UPDATE OF d'''), {'id': device_id}).mappings().first()
+    if (not device or device['status'] != 'active' or device['revoked_at'] is not None
+            or not hmac.compare_digest(device['secret_hash'], digest(token))):
+        raise HTTPException(401, 'Device authentication failed')
+    return device
+
+
+@router.post('/{device_id}/heartbeat', dependencies=[Depends(device_ip)])
+def heartbeat(device_id: UUID, payload: ReaderHeartbeat,
+              x_device_token: str | None = Header(default=None), db: Session = Depends(get_db)):
+    with db.begin():
+        authenticated_device(db, device_id, x_device_token)
+        consume('device_heartbeat_device', device_id, 6)
+        received = db.execute(text('''UPDATE devices SET heartbeat_at=clock_timestamp(),
+            reported_reader_state=:state,reported_pending_count=:pending,
+            reported_rejected_count=:rejected WHERE id=:id RETURNING heartbeat_at'''),
+            {'id': device_id, 'state': payload.reader_state, 'pending': payload.pending_count,
+             'rejected': payload.rejected_count}).scalar_one()
+    return {'device_id': device_id, 'received_at': received, 'official_result_created': False}
+
+
+@router.post('/{device_id}/revoke')
+def revoke_reader(device_id: UUID, actor: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    with db.begin():
+        loft = db.execute(text('SELECT loft_id FROM devices WHERE id=:id'), {'id': device_id}).scalar_one_or_none()
+        if loft is None:
+            raise HTTPException(404, 'Device not found')
+        check_loft_admin(db, actor, loft)
+        db.execute(text('SELECT id FROM devices WHERE id=:id FOR UPDATE'), {'id': device_id})
+        db.execute(text('UPDATE device_gateway_credentials SET revoked_at=clock_timestamp() WHERE device_id=:id'), {'id': device_id})
+        db.execute(text('''UPDATE devices SET heartbeat_at=NULL,reported_reader_state=NULL,
+            reported_pending_count=NULL,reported_rejected_count=NULL WHERE id=:id'''), {'id': device_id})
+        db.execute(text('''INSERT INTO audit_logs(actor_id,action,entity_type,entity_id)
+            VALUES (:actor,'device.gateway_credentials_revoked','device',:id)'''), {'actor': actor['id'], 'id': device_id})
+    return {'device_id': device_id, 'credential_status': 'revoked'}
+
+
 @router.post('', status_code=201)
 def register_reader(payload: ReaderCreate, actor: dict=Depends(require_admin),
                     db: Session=Depends(get_db)):
@@ -80,7 +128,17 @@ def register_reader(payload: ReaderCreate, actor: dict=Depends(require_admin),
 @router.get('')
 def list_readers(actor: dict=Depends(require_admin), db: Session=Depends(get_db)):
     rows = db.execute(text('''SELECT d.id,d.loft_id,d.device_identifier,d.status,d.last_seen_at,
-        d.reader_adapter,d.reader_protocol FROM devices d JOIN lofts l ON l.id=d.loft_id
+        d.reader_adapter,d.reader_protocol,d.heartbeat_at,d.reported_reader_state,
+        d.reported_pending_count,d.reported_rejected_count,
+        CASE WHEN g.device_id IS NULL THEN 'unprovisioned' WHEN g.revoked_at IS NOT NULL THEN 'revoked'
+             ELSE 'provisioned' END AS credential_status,
+        CASE WHEN d.status<>'active' THEN 'inactive'
+             WHEN g.device_id IS NULL THEN 'unprovisioned' WHEN g.revoked_at IS NOT NULL THEN 'revoked'
+             WHEN d.heartbeat_at IS NULL THEN 'never_seen'
+             WHEN d.heartbeat_at < clock_timestamp()-interval '90 seconds' THEN 'stale'
+             ELSE 'recent' END AS gateway_status
+        FROM devices d JOIN lofts l ON l.id=d.loft_id
+        LEFT JOIN device_gateway_credentials g ON g.device_id=d.id
         WHERE EXISTS(SELECT 1 FROM club_memberships a JOIN club_memberships m ON m.club_id=a.club_id
             WHERE a.user_id=:actor AND a.club_role='admin' AND m.user_id=l.user_id
             AND m.club_role IN ('member','guest'))
@@ -112,6 +170,8 @@ def provision(device_id: UUID, actor: dict=Depends(require_admin),
             INSERT INTO audit_logs(actor_id,action,entity_type,entity_id)
             VALUES (:actor,'device.gateway_credentials_rotated','device',:device)
         """),{"actor":actor["id"],"device":device_id})
+        db.execute(text('''UPDATE devices SET heartbeat_at=NULL,reported_reader_state=NULL,
+            reported_pending_count=NULL,reported_rejected_count=NULL WHERE id=:id'''), {'id': device_id})
     return {"device_id":device_id,"device_token":secret,
             "warning":"Token displayed once. Store securely; HTTPS required. Prototype only."}
 

@@ -14,6 +14,26 @@ def validate_token(token: str):
         raise ValueError("Set PIGEON_DEVICE_TOKEN to the device credential")
 
 
+def send_heartbeat(queue, config, token, client):
+    """Report gateway reachability and scoped queue counts; never claim hardware health."""
+    validate_token(token)
+    counts = queue.diagnostics(config)['queue']
+    try:
+        response = client.post(f'{config.backend_url.rstrip("/")}/devices/{config.device_id}/heartbeat',
+            headers={'X-Device-Token': token}, json={'reader_state': 'not_probed',
+                'pending_count': counts.get('pending', {}).get('count', 0),
+                'rejected_count': counts.get('rejected', {}).get('count', 0)},
+            follow_redirects=False, timeout=15)
+        if response.status_code != 200:
+            return {'heartbeat': 'unconfirmed', 'http_status': response.status_code}
+        data = response.json()
+        if str(UUID(data['device_id'])) != config.device_id or not data.get('received_at'):
+            raise ValueError('Invalid heartbeat acknowledgement')
+        return {'heartbeat': 'received', 'reader_state': 'not_probed'}
+    except (httpx.TransportError, ValueError, KeyError, TypeError):
+        return {'heartbeat': 'unconfirmed'}
+
+
 def synchronize(queue: Queue, config: Config, token: str, client: httpx.Client, now=None, stop=None):
     validate_token(token)
     now = time.time() if now is None else now

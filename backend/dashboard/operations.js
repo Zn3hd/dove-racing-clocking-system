@@ -13,7 +13,6 @@
       <section class="operation-card"><h2>Private QR labels</h2><form id="ops-qr"><label>Guest entry<select name="entry_id" required></select></label><label>Validity in minutes<input name="expires_in_minutes" type="number" min="1" max="1440" value="120" required></label><p class="field-help">Issuing a new label revokes earlier labels for that entry. Share privately. Codes are generated here without a third-party QR service.</p><button class="primary" type="submit">Issue / rotate QR label</button></form><div id="ops-tokens"></div></section>
       <section class="operation-card"><h2>Arrival evidence review</h2><label>Event<select id="ops-event"></select></label><p id="ops-event-detail" class="field-help"></p><form id="ops-review"><label>Decision<select name="decision"><option value="approve">Approve provisional evidence</option><option value="reject">Reject evidence</option></select></label><label>Review reason<textarea name="reason" minlength="8" required rows="2"></textarea></label><button class="primary" type="submit">Record review</button></form><details><summary>Independent physical guest verification</summary><form id="ops-physical"><label>Decision<select name="decision"><option value="confirmed">Confirmed in person</option><option value="rejected">Rejected</option></select></label><label>Observed ring number<input name="ring_number_seen" required maxlength="200"></label><label>Physical evidence note<textarea name="evidence_note" minlength="12" required rows="2"></textarea></label><p class="field-help">Record only a verification you actually performed. This does not certify clock integrity or create official results.</p><button class="outline" type="submit">Record physical verification</button></form></details></section>
     </div>
-    <section class="operation-card"><h2>Reader health and recovery</h2><p class="field-help">Last receipt is not a connection probe. Unsent guest outbox records stay on the guest device; use Recover receipts there. Flagged evidence is available in Live race.</p><ul id="ops-devices"></ul></section>
     <dialog id="ops-label"><h2>Private clocking QR</h2><p id="ops-label-expiry" class="muted"></p><canvas id="ops-label-canvas" aria-label="Private QR clocking label"></canvas><p class="field-help">Keep this label private. Closing clears it from this page. Lost labels must be rotated.</p><div class="dialog-actions"><button id="ops-label-close" class="outline" type="button">Close</button><button id="ops-label-download" class="primary" type="button">Download PNG</button></div></dialog>`;
   const get = id => document.getElementById(id);
   const fields = form => Object.fromEntries(new FormData(form));
@@ -37,15 +36,15 @@
     if (!state.club) { message('Create or join your club in Members first.', true); return; }
     get('ops-refresh').disabled = true;
     try {
-      const [races, pigeons, lofts, devices] = await Promise.all([api('/races'), api('/pigeons'), api('/lofts'), api('/devices')]);
+      const [races, pigeons, lofts] = await Promise.all([api('/races'), api('/pigeons'), api('/lofts')]);
       if (version !== data.version || !state.token) return;
       Object.assign(data, { races, pigeons, lofts });
+      window.Readers?.load(lofts, races);
       options(get('ops-pigeon').elements.loft_id, lofts.filter(l => l.verified_at), l => l.id, l => l.name);
       for (const form of ['ops-ring', 'ops-entry']) options(get(form).elements.pigeon_id, pigeons.filter(p => p.status === 'active'), p => p.id, p => p.official_ring_number);
       options(get('ops-race'), races, r => r.id, r => `${r.name} (${r.status})`);
       data.race = races.some(r => r.id === data.race) ? data.race : races[0]?.id || '';
       get('ops-race').value = data.race;
-      get('ops-devices').replaceChildren(...devices.map(d => element('li', '', `${d.device_identifier} · ${d.reader_adapter} · ${d.status} · Last receipt: ${d.last_seen_at ? new Date(d.last_seen_at).toLocaleString() : 'never'}`)));
       await loadRace();
     } catch (error) { if (error.name !== 'AbortError') message(error.message, true); }
     finally { get('ops-refresh').disabled = false; }
@@ -147,7 +146,7 @@
     host.querySelectorAll('form').forEach(item => item.reset());
     for (const selector of ['#ops-pigeon [name=loft_id]','#ops-ring [name=pigeon_id]',
       '#ops-entry [name=pigeon_id]','#ops-race','#ops-qr [name=entry_id]','#ops-event']) host.querySelector(selector).replaceChildren();
-    for (const id of ['ops-entries','ops-tokens','ops-devices']) get(id).replaceChildren();
+    for (const id of ['ops-entries','ops-tokens']) get(id).replaceChildren();
     get('ops-event-detail').textContent=''; get('ops-race-status').textContent='';
   }};
 })();

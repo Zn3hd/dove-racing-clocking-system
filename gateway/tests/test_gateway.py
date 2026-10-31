@@ -10,6 +10,35 @@ from pigeon_gateway.adapters import KeyboardLines, Reading, SerialLines, Simulat
 from pigeon_gateway.config import Config
 from pigeon_gateway.queue import Queue
 from pigeon_gateway.sync import synchronize
+from pigeon_gateway.sync import send_heartbeat
+
+
+def test_heartbeat_scopes_counts_and_preserves_evidence(tmp_path):
+    cfg=config(tmp_path); q=Queue(cfg.queue_path)
+    other=config(tmp_path,device_id=str(uuid4()))
+    q.enqueue(cfg,Reading('TEST',datetime.now(timezone.utc),simulated=True))
+    q.enqueue(other,Reading('OTHER',datetime.now(timezone.utc),simulated=True))
+    def handler(request):
+        assert request.url.path==f'/devices/{cfg.device_id}/heartbeat'
+        assert json.loads(request.content)=={'reader_state':'not_probed','pending_count':1,'rejected_count':0}
+        assert request.headers['X-Device-Token']=='private-token'
+        return httpx.Response(200,json={'device_id':cfg.device_id,'received_at':'2026-10-31T00:00:00Z'})
+    try:
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            assert send_heartbeat(q,cfg,'private-token',client)['heartbeat']=='received'
+        assert q.counts()=={'pending':2}
+    finally:q.close()
+
+
+@pytest.mark.parametrize('status',[302,401,429,500])
+def test_unconfirmed_heartbeat_does_not_follow_redirect_or_leak_token(tmp_path,status):
+    cfg=config(tmp_path);q=Queue(cfg.queue_path)
+    try:
+        with httpx.Client(transport=httpx.MockTransport(lambda request:httpx.Response(status))) as client:
+            result=send_heartbeat(q,cfg,'private-token',client)
+        assert result=={'heartbeat':'unconfirmed','http_status':status}
+        assert 'private-token' not in str(result)
+    finally:q.close()
 
 
 def config(tmp_path, **overrides):

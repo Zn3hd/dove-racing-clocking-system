@@ -12,3 +12,4 @@
 .loft-address{white-space:normal;max-width:260px;overflow-wrap:anywhere;line-height:1.5}
 
 .operations-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.operation-card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:25px;margin-bottom:20px;min-width:0}.operation-card form>button{margin-top:18px}.operation-card ul{padding-left:20px;font-size:12px;line-height:1.8;overflow-wrap:anywhere}.operation-card details{margin-top:22px}.operation-card summary{cursor:pointer;font-size:13px;font-weight:600}.operation-card canvas{max-width:100%;height:auto}#ops-label-canvas{max-width:100%;height:auto}@media(max-width:1000px){.operations-grid{grid-template-columns:1fr}}
+#reader-config-output { white-space: pre-wrap; overflow-wrap: anywhere; }

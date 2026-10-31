@@ -162,6 +162,38 @@ def test_real_browser_guest_qr_to_reviewed_standings(live_server, capture):
                 create.locator('button[type=submit]').click()
             assert reply.value.status == 201
             race = reply.value.json()['id']
+            if capture == 'web_camera':
+                reader_form=admin.locator('#reader-create')
+                reader_form.locator('[name=loft_id]').select_option(loft['id'])
+                reader_form.locator('[name=device_identifier]').fill('Browser simulator reader')
+                with admin.expect_response(lambda r:r.url.endswith('/devices') and r.request.method=='POST') as registered:
+                    reader_form.locator('button[type=submit]').click()
+                assert registered.value.status==201
+                device_id=registered.value.json()['id']
+                with admin.expect_response(lambda r:r.url.endswith('/provision')) as provisioned:
+                    admin.get_by_role('button',name='Provision / rotate token',exact=True).click()
+                token=provisioned.value.json()['device_token']
+                expect(admin.locator('#reader-secret-value')).to_have_value(token)
+                admin.locator('#reader-secret-close').click()
+                expect(admin.locator('#reader-secret-value')).to_have_value('')
+                admin.locator('#reader-config-device').select_option(device_id)
+                admin.locator('#reader-config-race').select_option(race)
+                admin.locator('#reader-config-generate').click()
+                config=json.loads(admin.locator('#reader-config-output').inner_text())
+                assert config['device_id']==device_id and config['race_id']==race
+                assert token not in json.dumps(config)
+                assert api.post(f'/devices/{device_id}/heartbeat',headers={'X-Device-Token':token},
+                    json={'reader_state':'not_probed','pending_count':2,'rejected_count':0}).status_code==200
+                admin.locator('#ops-refresh').click()
+                expect(admin.locator('#reader-list')).to_contain_text('Gateway: recent')
+                expect(admin.locator('#reader-list')).to_contain_text('Pending: 2')
+                admin.once('dialog',lambda dialog:dialog.accept())
+                with admin.expect_response(lambda r:r.url.endswith('/revoke')) as revoked:
+                    admin.get_by_role('button',name='Revoke credential',exact=True).click()
+                assert revoked.value.status==200
+                expect(admin.locator('#reader-list')).to_contain_text('Gateway: revoked')
+                assert api.post(f'/devices/{device_id}/heartbeat',headers={'X-Device-Token':token},
+                    json={'pending_count':0,'rejected_count':0}).status_code==401
             admin.locator('#ops-open').click()
             admin.locator('#ops-entry [name=pigeon_id]').select_option(pigeon['id'])
             with admin.expect_response(lambda r: r.url.endswith('/entries') and r.request.method=='POST') as reply:

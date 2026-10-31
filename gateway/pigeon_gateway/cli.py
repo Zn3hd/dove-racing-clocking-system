@@ -3,20 +3,25 @@ import json
 import os
 import sys
 import threading
+import time
 
 import httpx
 
 from .adapters import KeyboardLines, SerialLines, Simulator, NetworkLines
 from .config import Config
 from .queue import Queue
-from .sync import synchronize, validate_token
+from .sync import synchronize, validate_token, send_heartbeat
 
 
 def sync_worker(config, token, stop):
     queue = Queue(config.queue_path)
     try:
         with httpx.Client(trust_env=False) as client:
+            next_heartbeat = 0
             while not stop.is_set():
+                if time.monotonic() >= next_heartbeat:
+                    print(json.dumps(send_heartbeat(queue, config, token, client)), flush=True)
+                    next_heartbeat = time.monotonic() + 30
                 result = synchronize(queue, config, token, client, stop=stop)
                 if any(result.values()):
                     print(json.dumps(result), flush=True)
@@ -33,6 +38,7 @@ def main():
     simulator.add_argument("--tag", action="append", required=True)
     commands.add_parser("status", help="Show local queue counts without printing tag IDs")
     commands.add_parser("diagnostics", help="Show configured reader and queue health without probing hardware")
+    commands.add_parser("heartbeat", help="Report gateway reachability without creating an arrival")
     sync = commands.add_parser("sync", help="Deliver queued evidence")
     sync.add_argument("--once", action="store_true")
     commands.add_parser("run", help="Capture configured keyboard/serial reader and synchronize")
@@ -60,6 +66,10 @@ def main():
         if not token:
             raise ValueError("Set PIGEON_DEVICE_TOKEN in the environment; do not put it in configuration files")
         validate_token(token)
+        if args.command == 'heartbeat':
+            with httpx.Client(trust_env=False) as client:
+                print(json.dumps(send_heartbeat(queue, config, token, client)))
+            return
         if args.command == "sync" and args.once:
             with httpx.Client(trust_env=False) as client:
                 print(json.dumps(synchronize(queue, config, token, client)))

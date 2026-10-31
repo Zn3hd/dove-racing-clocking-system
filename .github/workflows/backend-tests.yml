@@ -60,6 +60,7 @@ jobs:
               conn.execute(Path("sql/011_loft_gps.sql").read_text())
               conn.execute(Path("sql/012_loft_address.sql").read_text())
               conn.execute(Path("sql/013_rate_limits.sql").read_text())
+              conn.execute(Path("sql/014_reader_monitoring.sql").read_text())
           PY
       - name: Compile Python source (catch syntax errors)
         run: python -m compileall -q app tests

@@ -12,6 +12,7 @@ function message(text, failure = false) {
 }
 
 function signOut(reason = "") {
+  window.Readers?.clear();
   window.Operations?.clear();
   locationDraft.request += 1;
   Object.assign(locationDraft, { userId: null, loft: null, source: "manual", accuracy: null,
@@ -290,6 +291,7 @@ function stopLive() {
 }
 
 function showView(view) {
+  window.Readers?.stop();
   stopLive();
   $("#members-view").hidden = view !== "members";
   $("#live-view").hidden = view !== "live";
