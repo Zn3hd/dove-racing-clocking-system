@@ -1,4 +1,4 @@
-# Dove Racing Clocking System
+# Pigeon Racing Clocking System
 
 Single-club pigeon racing platform. Software development in progress; RFID hardware details pending.
 

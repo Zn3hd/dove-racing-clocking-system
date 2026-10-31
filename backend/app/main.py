@@ -24,7 +24,7 @@ from .routers.manual_clocking import router as manual_clocking_router
 from .routers.sms_clocking import router as sms_clocking_router
 from .routers.messenger_clocking import router as messenger_clocking_router
 
-app = FastAPI(title="Dove Racing Prototype API", version="0.2.0")
+app = FastAPI(title="Pigeon Racing Clocking System API", version="0.2.0")
 
 # Same-origin dashboard: no cross-origin token transmission or frontend build.
 app.mount("/dashboard", StaticFiles(directory=Path(__file__).resolve().parents[1] / "dashboard", html=True), name="dashboard")
