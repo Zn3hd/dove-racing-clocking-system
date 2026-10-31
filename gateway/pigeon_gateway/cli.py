@@ -6,7 +6,7 @@ import threading
 
 import httpx
 
-from .adapters import KeyboardLines, SerialLines, Simulator
+from .adapters import KeyboardLines, SerialLines, Simulator, NetworkLines
 from .config import Config
 from .queue import Queue
 from .sync import synchronize, validate_token
@@ -69,6 +69,8 @@ def main():
             return
         if config.adapter == "usb_hid":
             adapter = KeyboardLines(sys.stdin)
+        elif config.adapter == "network":
+            adapter = NetworkLines(config.network_host, config.network_port, config.network_timeout)
         elif config.adapter == "serial":
             adapter = SerialLines(config.serial_port, config.baudrate)
         else:

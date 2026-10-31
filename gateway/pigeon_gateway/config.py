@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import UUID
+from .profiles import UIDProfile
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,17 @@ class Config:
     allow_local_http: bool = False
     capture_mode: str = "operator"
 
+    uid_profile: dict | None = None
+    network_host: str | None = None
+    network_port: int | None = None
+    network_timeout: float = 10.0
+
+    def parse_uid(self, raw: str) -> str:
+        if self.uid_profile is not None:
+            return UIDProfile(**self.uid_profile).parse(raw)
+        from .adapters import normalize_tag
+        return normalize_tag(raw, self.normalization)
+
     def __post_init__(self):
         url = urlsplit(self.backend_url)
         if (url.username or url.password or url.query or url.fragment or url.path not in ("", "/")
@@ -30,8 +42,14 @@ class Config:
             raise ValueError("HTTPS required; HTTP is allowed only for explicitly enabled loopback tests")
         UUID(self.device_id)
         UUID(self.race_id)
-        if self.adapter not in ("simulator", "usb_hid", "serial"):
+        if self.adapter not in ("simulator", "usb_hid", "serial", "network"):
             raise ValueError("Unsupported adapter; network readers require a documented protocol adapter")
+        if self.uid_profile is not None:
+            UIDProfile(**self.uid_profile)
+        if self.adapter == "network" and (not self.network_host or not isinstance(self.network_port, int) or not 1 <= self.network_port <= 65535):
+            raise ValueError("Network adapter requires a host and port 1-65535")
+        if not 0 < self.network_timeout <= 300:
+            raise ValueError("Network timeout must be between 0 and 300 seconds")
         if self.normalization not in ("preserve", "upper", "hex"):
             raise ValueError("Unknown tag normalization policy")
         if self.capture_mode not in ('operator', 'automatic'):

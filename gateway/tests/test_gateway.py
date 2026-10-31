@@ -141,7 +141,7 @@ def test_capture_mode_raw_scan_and_safe_diagnostics(tmp_path):
     cfg = config(tmp_path, adapter='usb_hid', capture_mode='automatic', normalization='hex')
     queue = Queue(cfg.queue_path)
     try:
-        queue.enqueue(cfg, next(Simulator(['00:ab-12']).readings()))
+        queue.enqueue(cfg, Reading('00:ab-12', datetime.now(timezone.utc)))
         row = queue.due(cfg, 100000000000)[0]
         payload = json.loads(row['payload'])
         assert payload['ring_uid'] == '00AB12'

@@ -13,8 +13,9 @@ locally at the loft; it does not run in the cloud API or dashboard browser.
 - USB serial/COM: ASCII lines, newline-terminated, configurable port/baudrate,
   default 8N1. Binary framing, checksums, and vendor commands need a dedicated
   protocol adapter. Install the optional `serial` dependency for this mode.
-- Network and other vendor readers: use the shared `Adapter` interface, but
-  require documented protocol implementations. They are not implemented yet.
+- Network: TCP ASCII newline client with configured `network_host`,
+  `network_port`, and optional `network_timeout` (default 10 seconds).
+  Vendor binary protocols still require a dedicated `Adapter` implementation.
 
 Matching frequency does not establish ring/reader compatibility. Test the
 actual protocol and emitted IDs before assigning hardware. No hardware model
@@ -140,3 +141,10 @@ offline/restart, duplicate response recovery, rejection retention, origin/device
 binding, and token handling. Backend PostgreSQL integration tests cover
 registration, club access, mapping, provenance, replay, and legacy compatibility.
 Real USB/serial/Pi/network hardware needs a separate compatibility acceptance run.
+
+## Reader profiles and remaining adapters
+
+See [reader adapter plan](../docs/reader-adapter-plan.md) for the RDM582 /
+EM4100/EM4200 reference, configurable `uid_profile` fields, example configuration,
+and USB/web QR, ESP32 and Raspberry Pi acceptance work. QR scans must use the
+QR API; never route QR tokens into the RFID queue.

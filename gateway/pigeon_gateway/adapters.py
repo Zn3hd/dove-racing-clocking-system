@@ -11,6 +11,7 @@ from typing import TextIO
 class Reading:
     tag: str
     observed_at: datetime
+    simulated: bool = False
 
 
 def normalize_tag(raw: str, policy: str) -> str:
@@ -41,7 +42,7 @@ class Simulator(Adapter):
 
     def readings(self):
         for tag in self.tags:
-            yield Reading(tag, datetime.now(timezone.utc))
+            yield Reading(tag, datetime.now(timezone.utc), simulated=True)
 
 
 class KeyboardLines(Adapter):
@@ -51,7 +52,7 @@ class KeyboardLines(Adapter):
 
     def readings(self):
         while line := self.stream.readline(1024):
-            if len(line) > 202:
+            if len(line) > 1024:
                 raise ValueError("Oversized reader line; check the framing configuration")
             yield Reading(line, datetime.now(timezone.utc))
 
@@ -72,8 +73,27 @@ class SerialLines(Adapter):
                 if not chunk:
                     continue
                 buffer.extend(chunk)
-                if len(buffer) > 202:
+                if len(buffer) > 1024:
                     raise ValueError("Oversized serial frame; expected newline-terminated ASCII tags")
                 if chunk == b"\n":
                     yield Reading(buffer.decode("ascii", errors="strict"), datetime.now(timezone.utc))
                     buffer.clear()
+
+
+class NetworkLines(Adapter):
+    """TCP client for explicitly configured ASCII newline protocols only.
+
+    EOF/timeout fails closed; run under a supervisor to reconnect. No vendor
+    discovery, commands, TLS, or binary decoding is implied.
+    """
+    def __init__(self, host: str, port: int, timeout: float = 10):
+        self.host, self.port, self.timeout = host, port, timeout
+
+    def readings(self):
+        import socket
+        with socket.create_connection((self.host, self.port), timeout=self.timeout) as connection:
+            with connection.makefile("r", encoding="ascii", errors="strict", newline="") as stream:
+                for reading in KeyboardLines(stream).readings():
+                    if not reading.tag.endswith("\n"):
+                        raise ValueError("Incomplete network frame")
+                    yield reading

@@ -1,0 +1,17 @@
+{
+  "backend_url": "https://dove-racing-clocking-system.onrender.com",
+  "device_id": "00000000-0000-0000-0000-000000000001",
+  "race_id": "00000000-0000-0000-0000-000000000002",
+  "adapter": "usb_hid",
+  "protocol": "site-ascii-lines-v1",
+  "normalization": "preserve",
+  "queue_path": "gateway-queue.sqlite3",
+  "capture_mode": "operator",
+  "uid_profile": {
+    "name": "rdm582-site-decimal-example",
+    "prefix": "",
+    "suffix": "",
+    "pattern": "[0-9]{10}",
+    "normalization": "preserve"
+  }
+}

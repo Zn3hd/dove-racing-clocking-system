@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-from .adapters import Reading, normalize_tag
+from .adapters import Reading
 from .config import Config
 
 
@@ -29,9 +29,11 @@ class Queue:
     def enqueue(self, config: Config, reading: Reading) -> str:
         if reading.observed_at.tzinfo is None or reading.observed_at.utcoffset() is None:
             raise ValueError("Reader timestamp must include a timezone")
+        if reading.simulated and config.adapter != "simulator":
+            raise ValueError("Simulated readings require a simulator configuration")
         message_id = str(uuid4())
         payload = {"message_id": message_id, "race_id": config.race_id,
-                   "ring_uid": normalize_tag(reading.tag, config.normalization),
+                   "ring_uid": config.parse_uid(reading.tag),
                    "device_recorded_at": reading.observed_at.isoformat(),
                    "offline_buffered": True, "adapter_type": config.adapter,
                    "protocol": config.protocol,
