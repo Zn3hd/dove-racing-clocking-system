@@ -348,6 +348,51 @@ def test_complete_club_guest_race_with_physical_review(scenario):
             ON e.id=rr.entry_id WHERE e.race_id=:race"""), {"race": race}).scalar_one() == 0
 
 
+def test_dashboard_administrator_api_workflow(scenario):
+    """Exercise the dashboard's real requests without production credentials."""
+    s = scenario
+    c = s["client"]
+    assert c.get("/dashboard/").status_code == 200
+    login = c.post("/auth/login", json={"email": f"{s['admin']}@example.test",
+                                        "password": "integration-password-123"})
+    assert login.status_code == 200, login.text
+    headers = {"Authorization": "Bearer " + login.json()["access_token"]}
+    profile = c.get("/auth/me", headers=headers)
+    assert profile.status_code == 200
+    assert profile.json()["role"] == "chairman"
+    assert c.get("/clubs", headers=headers).json() == []
+    club = c.post("/clubs", headers=headers, json={"name": "Dashboard Club",
+                                                  "description": "Dashboard workflow test"})
+    assert club.status_code == 201, club.text
+    club_id = club.json()["id"]
+    assert c.get("/clubs", headers=headers).json()[0]["name"] == "Dashboard Club"
+    created = c.post("/participants", headers=headers, json={"club_id": club_id,
+        "full_name": "Dashboard Member", "email": f"{uuid4()}@example.test",
+        "phone": None, "role": "member", "password": "dashboard-member-password"})
+    assert created.status_code == 201, created.text
+    uid = UUID(created.json()["id"])
+    s["extra_user_ids"].append(uid)
+    assert c.post(f"/clubs/{club_id}/members", headers=headers,
+                  json={"user_id": str(s["guest"])}).status_code == 201
+    directory = c.get(f"/participants?club_id={club_id}", headers=headers)
+    assert directory.status_code == 200
+    assert len(directory.json()) == 2
+    assert {row["role_code"] for row in directory.json()} == {"member", "guest"}
+    updated = c.put(f"/participants/{uid}", headers=headers,
+                    json={"full_name": "Updated Dashboard Member", "phone": "+639123456789"})
+    assert updated.status_code == 200
+    person = next(row for row in c.get(f"/participants?club_id={club_id}", headers=headers).json()
+                  if row["id"] == str(uid))
+    assert person["phone"] == "+639123456789"
+    changed = c.post("/auth/change-password", headers=headers, json={
+        "current_password": "integration-password-123", "new_password": "dashboard-new-password"})
+    assert changed.status_code == 200
+    assert c.post("/auth/login", json={"email": f"{s['admin']}@example.test",
+        "password": "integration-password-123"}).status_code == 401
+    assert c.post("/auth/login", json={"email": f"{s['admin']}@example.test",
+        "password": "dashboard-new-password"}).status_code == 200
+
+
 def make_race(s):
     c=s["client"]
     headers=s["headers"](s["admin"])

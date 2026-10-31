@@ -27,7 +27,11 @@ criteria and have not been validated by a full repository and deployment audit.
   previews; physical confirmation is displayed separately from timing trust.
   A full club-to-guest-race integration scenario is added. Official finalization
   deliberately remains disabled, including after physical guest confirmation.
-- Dashboard: no web administration frontend exists in this repository.
+- Dashboard: the first same-origin web administration milestone is implemented
+  at `/dashboard/`: login, club creation, member/guest directory and creation,
+  account linking, contact editing, and password changes. Loft, pigeon, race,
+  and evidence screens remain outstanding. Browser visual QA is unavailable in
+  the current environment; API workflow and static delivery tests are included.
 - QA: unit/API tests and disposable PostgreSQL CI exist. Local PostgreSQL
   integration execution remains unavailable in the current environment.
 - Deployment: Render health, Swagger, and club route presence were checked;

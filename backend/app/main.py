@@ -1,7 +1,10 @@
 """Prototype calculation endpoints; not an official clocking service."""
 from datetime import datetime
+from pathlib import Path
 from typing import Literal
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from .calculations import distance_meters, speed_mpm, convert_speed
 
@@ -22,6 +25,29 @@ from .routers.sms_clocking import router as sms_clocking_router
 from .routers.messenger_clocking import router as messenger_clocking_router
 
 app = FastAPI(title="Dove Racing Prototype API", version="0.2.0")
+
+# Same-origin dashboard: no cross-origin token transmission or frontend build.
+app.mount("/dashboard", StaticFiles(directory=Path(__file__).resolve().parents[1] / "dashboard", html=True), name="dashboard")
+
+
+@app.middleware("http")
+async def dashboard_headers(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/dashboard"):
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self'; "
+            "connect-src 'self'; img-src 'self'; object-src 'none'; "
+            "base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.get("/", include_in_schema=False)
+def dashboard_home():
+    return RedirectResponse("/dashboard/")
 
 class FlightCalculation(BaseModel):
     release_latitude: float = Field(ge=-90, le=90)

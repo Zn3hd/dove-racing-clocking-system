@@ -55,7 +55,20 @@ To run locally, use a **dedicated disposable database**, apply migrations `001` 
 
 Integration suite status must be verified in GitHub Actions; committed tests are not evidence of passing tests. Remaining scenarios include concurrency races, expired tokens, offline hardware, race finalization, and first-valid-arrival selection.
 
-## Single-club administration
+## Administration dashboard
+
+Open `/dashboard/` on the backend host (or `/`, which redirects there). The
+dashboard uses the existing administrator login and same-origin API. No frontend
+build or additional service is required. The first milestone supports creating
+the club, searching/filtering participants, creating member/guest accounts,
+linking existing accounts by ID, editing names/phone numbers, and changing the
+signed-in administrator's password. JWTs are held only in page memory; refreshing
+or closing the page signs out. The server still enforces all club permissions.
+Directory totals cover at most the first 1000 returned participants. Loft,
+pigeon, race, and evidence screens are planned for the next dashboard milestones.
+Password changes do not revoke existing JWTs; the UI signs out after success.
+
+## Club API
 
 Leaderboard previews exclude physically rejected arrivals, even if a prior evidence review approved them. Each preview row includes `physical_verification` (`not_recorded` or `confirmed`), `physically_verified_at`, and `source_channel`. Confirmed physical identity alone does not certify the submitted arrival time: every preview remains provisional and official finalization remains disabled.
 

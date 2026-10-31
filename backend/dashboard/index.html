@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#152b39">
+  <title>Dove Racing · Club administration</title>
+  <link rel="stylesheet" href="/dashboard/styles.css">
+  <script src="/dashboard/app.js" defer></script>
+</head>
+<body>
+  <noscript>This dashboard requires JavaScript. Enable JavaScript to sign in and manage your club.</noscript>
+  <section id="login-screen" class="login-layout">
+    <div class="login-story">
+      <a class="brand" href="/dashboard/"><span class="brand-mark" aria-hidden="true">D</span><span>DOVE RACING<small>CLUB ADMINISTRATION</small></span></a>
+      <div class="story-copy"><p class="eyebrow">FROM THE LOFT TO THE FINISH</p><h1>A clear view<br>of your club.</h1><p>Your members, your community, and the foundation for every race. Manage it all from one place.</p></div>
+      <div class="flight-art" aria-hidden="true"><span class="orbit orbit-one"></span><span class="orbit orbit-two"></span><span class="bird">↗</span><span class="flight-label">READY FOR THE NEXT RELEASE</span></div>
+      <p class="story-foot">Dove Racing Clocking System <span>Administrator workspace</span></p>
+    </div>
+    <main class="login-panel">
+      <div class="login-card"><span class="pill">CLUB WORKSPACE</span><h2>Welcome back.</h2><p class="muted">Sign in with your chairman or president account.</p>
+        <form method="post" action="/dashboard/" id="login-form">
+          <label>Email address<input name="email" type="email" autocomplete="username" required placeholder="you@yourclub.com"></label>
+          <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+          <p id="login-error" class="error" role="alert"></p>
+          <button class="primary" type="submit">Sign in <span aria-hidden="true">→</span></button>
+        </form>
+        <p class="login-note">Accounts are created by a club administrator. Contact your club if you need access.</p>
+      </div>
+    </main>
+  </section>
+
+  <div id="workspace" class="workspace" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="/dashboard/"><span class="brand-mark" aria-hidden="true">D</span><span>DOVE RACING<small>CLUB ADMINISTRATION</small></span></a>
+      <div class="club-label"><span class="eyebrow">YOUR CLUB</span><strong id="sidebar-club">Club workspace</strong></div>
+      <nav aria-label="Workspace"><button class="nav-item selected" type="button" aria-current="page"><span aria-hidden="true">◫</span> Members</button></nav>
+      <div class="sidebar-bottom"><p class="pilot-label"><span></span> Development pilot</p><p>Race timing and official results are still under development.</p><a href="/docs" target="_blank" rel="noopener">API documentation ↗</a></div>
+    </aside>
+    <div class="main-shell">
+      <header class="topbar"><span>Club administration <span class="crumb">/ Members</span></span><div class="account"><span id="account-name"></span><button id="password-button" class="text-button" type="button">Change password</button><button id="logout-button" class="outline small" type="button">Sign out</button></div></header>
+      <main class="content">
+        <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+        <section class="page-heading"><div><p class="eyebrow">YOUR RACING COMMUNITY</p><h1>Club members</h1><p class="muted" id="club-description">Manage the people behind every flight.</p></div><button id="add-member-button" class="primary" type="button" disabled>＋ Add member</button></section>
+        <section id="club-setup" class="setup-card" hidden><div class="setup-symbol" aria-hidden="true">↗</div><div><h2>Give your club a home.</h2><p>No club is assigned to this administrator. Create the first club to get started, or contact its administrator if one already exists.</p><button id="create-club-button" class="primary" type="button">Create racing club</button></div></section>
+        <section class="stats" aria-label="Club statistics"><article><span>All participants</span><strong id="stat-total">—</strong><small>Members and guests</small></article><article><span>Active members</span><strong id="stat-members">—</strong><small>Registered club members</small></article><article><span>Active guests</span><strong id="stat-guests">—</strong><small>Guest participants</small></article></section>
+        <section class="members-card" aria-labelledby="directory-heading"><div class="directory-header"><div><h2 id="directory-heading">Member directory <span id="directory-count" class="count">0</span></h2><p class="muted">Keep your club's contact details up to date.</p></div><button id="assign-button" class="outline small" type="button" disabled>Link existing account</button></div>
+          <div class="filters"><label class="search-label"><span class="sr-only">Search participants</span><input id="search" type="search" placeholder="Search by name, email, or phone…"></label><label><span class="sr-only">Filter by role</span><select id="role-filter"><option value="all">All roles</option><option value="member">Members</option><option value="guest">Guests</option></select></label><button id="refresh-button" class="outline" type="button">Refresh</button></div>
+          <div class="table-wrap"><table><thead><tr><th scope="col">Participant</th><th scope="col">Role</th><th scope="col">Phone</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody id="member-rows"></tbody></table></div>
+          <div id="directory-state" class="directory-state" role="status">Sign in to load your club.</div>
+          <footer class="directory-footer"><span id="visible-count">No participants loaded</span><span>Club access is managed by your administrator</span></footer>
+        </section>
+        <p class="workspace-foot">DOVE RACING <span>Built around your club. Ready for the next flight.</span></p>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="club-dialog"><form method="post" action="/dashboard/" id="club-form"><div class="dialog-heading"><h2>Create racing club</h2><button class="close-dialog" type="button" aria-label="Close">×</button></div><p class="muted">This pilot supports one club. You will become its club administrator.</p><label>Club name<input name="name" required minlength="2" maxlength="160"></label><label>Description <span class="optional">optional</span><textarea name="description" maxlength="1000" rows="3"></textarea></label><p class="form-error error" role="alert"></p><div class="dialog-actions"><button class="close-dialog outline" type="button">Cancel</button><button class="primary" type="submit">Create club</button></div></form></dialog>
+  <dialog id="member-dialog"><form method="post" action="/dashboard/" id="member-form"><div class="dialog-heading"><h2>Add participant</h2><button class="close-dialog" type="button" aria-label="Close">×</button></div><p class="muted">Create an account and add it to this club.</p><label>Full name<input name="full_name" required maxlength="200" autocomplete="name"></label><div class="form-grid"><label>Email<input name="email" type="email" required maxlength="250" autocomplete="off"></label><label>Phone <span class="optional">optional</span><input name="phone" type="tel" maxlength="100" autocomplete="off"></label></div><label>Role<select name="role"><option value="member">Member</option><option value="guest">Guest</option></select></label><label>Initial password<input name="password" type="password" required minlength="12" maxlength="256" autocomplete="new-password"></label><p class="field-help">Use at least 12 characters. Share credentials privately with the participant.</p><p class="form-error error" role="alert"></p><div class="dialog-actions"><button class="close-dialog outline" type="button">Cancel</button><button class="primary" type="submit">Add participant</button></div></form></dialog>
+  <dialog id="assign-dialog"><form method="post" action="/dashboard/" id="assign-form"><div class="dialog-heading"><h2>Link an existing account</h2><button class="close-dialog" type="button" aria-label="Close">×</button></div><p class="muted">Add an active member or guest who already has an account. Ask your administrator for their account ID.</p><label>Account ID<input name="user_id" required pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></label><p class="form-error error" role="alert"></p><div class="dialog-actions"><button class="close-dialog outline" type="button">Cancel</button><button class="primary" type="submit">Link account</button></div></form></dialog>
+  <dialog id="edit-dialog"><form method="post" action="/dashboard/" id="edit-form"><div class="dialog-heading"><h2>Edit participant</h2><button class="close-dialog" type="button" aria-label="Close">×</button></div><label>Full name<input name="full_name" required maxlength="200"></label><label>Phone <span class="optional">optional</span><input name="phone" type="tel" maxlength="100"></label><p class="field-help">Email, role, and credentials are managed separately.</p><p class="form-error error" role="alert"></p><div class="dialog-actions"><button class="close-dialog outline" type="button">Cancel</button><button class="primary" type="submit">Save changes</button></div></form></dialog>
+  <dialog id="password-dialog"><form method="post" action="/dashboard/" id="password-form"><div class="dialog-heading"><h2>Change your password</h2><button class="close-dialog" type="button" aria-label="Close">×</button></div><label>Current password<input name="current_password" type="password" required autocomplete="current-password"></label><label>New password<input name="new_password" type="password" required minlength="12" maxlength="256" autocomplete="new-password"></label><label>Confirm new password<input name="confirmation" type="password" required minlength="12" maxlength="256" autocomplete="new-password"></label><p class="field-help">You will be signed out after changing your password. Existing tokens can remain valid for up to 30 minutes.</p><p class="form-error error" role="alert"></p><div class="dialog-actions"><button class="close-dialog outline" type="button">Cancel</button><button class="primary" type="submit">Change password</button></div></form></dialog>
+</body>
+</html>
