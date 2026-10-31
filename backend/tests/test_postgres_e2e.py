@@ -625,7 +625,7 @@ def test_suspicious_clocking_validation_and_simulator_guards(scenario):
         assert c.get(f'/races/{race}/live', headers=admin).json()['entries'] == []
     # Exact maximum speed is permitted, and a timestamp equal to release is not.
     with s['engine'].begin() as db:
-        db.execute(text('''UPDATE clocking_events SET metadata='{"simulated":true}'::jsonb,
+        db.execute(text('''UPDATE clocking_events SET metadata=jsonb_build_object('simulated',true),
             recorded_at=r.actual_release_at+interval '10 minutes',received_at=r.actual_release_at+interval '10 minutes'
             FROM races r WHERE clocking_events.id=:event AND r.id=:race'''), {'event': valid_id, 'race': race})
     assert c.get(f'/races/{race}/live', headers=admin).json()['entries'][0]['speed_mpm'] == 3000
