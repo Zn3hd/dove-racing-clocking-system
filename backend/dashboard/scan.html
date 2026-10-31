@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/dashboard/scan.css">
   <script src="/dashboard/vendor/jsQR.js" defer></script>
   <script src="/dashboard/qr-core.js" defer></script>
+  <script src="/dashboard/qr-outbox.js" defer></script>
   <script src="/dashboard/scan.js" defer></script>
 </head>
 <body>
@@ -27,6 +28,7 @@
     </section>
     <section id="scan-workspace" hidden>
       <div class="scan-actions"><strong id="scan-account"></strong><button id="scan-signout" class="outline" type="button">Sign out</button></div>
+      <section class="scan-note"><h2>Submission recovery</h2><p>Submission IDs are saved on this device before sending. QR codes and passwords are not saved. After a reload, sign in and recover receipts; if nothing was received, rescan the original code to reuse its submission ID. No arrival is backdated.</p><button id="scan-recover" class="outline small" type="button">Recover receipts</button><ul id="scan-outbox"></ul></section>
       <form id="scan-form" method="post" action="/dashboard/scan.html">
         <label>Your race entry<select id="scan-entry" required><option value="">Select an entry</option></select></label>
         <button id="scan-reload" class="outline small" type="button">Reload entries</button>

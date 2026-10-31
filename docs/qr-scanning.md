@@ -30,18 +30,13 @@ Existing QR labels encoding only the raw URL-safe clocking token still work.
 Versioned codes must match the selected entry. Arbitrary URLs are rejected and
 never opened. No clocking token belongs in a URL, log, RFID queue or telemetry.
 The issuance response reveals the token once; store/share labels privately.
-This change does not provide label-printing or an admin token-management UI.
+The administrator Race operations tab now issues private downloadable PNG labels, lists expiry/revocation metadata, and revokes tokens. Codes never enter URLs or third-party QR services.
 
 ## Retry and timing
 
-The page assigns one UUID per entry/token within the signed-in page session.
-Network failures and invalid acknowledgements reuse the identical body and ID;
-repeated successful scans in that session do not create additional requests.
-It keeps tokens and retry state **only in memory** (up to 100 distinct scans).
-Signing out/reloading/closing clears them. There is no browser offline spool;
-if delivery is unconfirmed, keep the page open and retry the same scan. Closing
-the page loses the retry key, so consult your club before resubmitting after an
-uncertain response. RFID's SQLite queue is separate and unchanged.
+The page durably stores one submission ID/source/time per account and entry/token digest in IndexedDB before sending. It never stores the raw QR code, password or bearer token. After reload, sign in and use Recover receipts. If the server did not receive the event, rescan the original code to reuse that ID; accepted receipts remain recoverable after expiry/revocation/closure. New late arrivals are still rejected. Client queue time is untrusted evidence and is not used to backdate speed. The gateway separately respects Retry-After without changing its SQLite payloads.
+
+See [Clocking reliability](clocking-reliability.md) for state transitions, recovery boundaries, shared rate limits, and current offline limitations.
 
 The endpoint records operator capture, declared `capture_source` (`usb_qr`,
 `web_camera`, `manual`) and untrusted timing metadata, never the raw QR token.

@@ -31,7 +31,8 @@ test('lost response retries the identical envelope; repeated scans do not duplic
 });
 test('invalid acknowledgement retains the original key', async () => {
   const session = new ScanSession(() => key);
-  for (const result of [{}, { ...ack, official_result_created: true }]) {
+  for (const result of [{}, { ...ack, official_result_created: true },
+    { event_id: event, status: 'pending' }, { ...ack, status: 'valid' }]) {
     await assert.rejects(session.submit(token, entry, 'manual', async () => result));
   }
   assert.equal((await session.submit(token, entry, 'manual', async (body) => {
@@ -45,4 +46,12 @@ test('concurrent scans are blocked, and signout removes tokens from memory', asy
   await assert.rejects(session.submit(token, entry, 'usb_qr', async () => ack), /already/);
   finish(ack); await first;
   session.clear(); assert.equal(session.attempts.size, 0);
+});
+
+test('receipt reconciliation replaces a stale cached acknowledgement', async () => {
+  const session = new ScanSession(() => key);
+  await session.submit(token, entry, 'usb_qr', async () => ack);
+  session.reconcile(key, { ...ack, status:'invalid' });
+  const receipt = await session.submit(token, entry, 'usb_qr', () => { throw new Error('No duplicate send'); });
+  assert.equal(receipt.status,'invalid');
 });

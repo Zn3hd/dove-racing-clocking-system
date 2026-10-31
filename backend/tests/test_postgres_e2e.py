@@ -789,6 +789,20 @@ def test_qr_scanner_provenance_and_owned_entry_listing(scenario, source):
     assert received.json()['official_result_created'] is False
     replay = c.post('/clocking/qr/scans', headers=guest, json=payload)
     assert replay.json()['event_id'] == received.json()['event_id']
+    changed_source = c.post('/clocking/qr/scans', headers=guest,
+                            json={**payload, 'capture_source': 'manual'})
+    assert changed_source.status_code == 409
+    rotated = c.post('/clocking/qr/tokens', headers=admin, json={'entry_id': entry})
+    assert rotated.status_code == 201
+    changed_token = c.post('/clocking/qr/scans', headers=guest,
+                           json={**payload, 'token': rotated.json()['token']})
+    assert changed_token.status_code == 409
+    with s['engine'].begin() as db:
+        db.execute(text("UPDATE qr_tokens SET expires_at=now()-interval '1 second' WHERE id=:id"),
+                   {'id': rotated.json()['token_id']})
+    expired = c.post('/clocking/qr/scans', headers=guest, json={**payload,
+        'token': rotated.json()['token'], 'idempotency_key': str(uuid4())})
+    assert expired.status_code == 401
     with s['engine'].connect() as db:
         row = db.execute(text('SELECT status,metadata FROM clocking_events WHERE id=:id'),
                          {'id': received.json()['event_id']}).mappings().one()

@@ -188,3 +188,5 @@ Do not replace system keyboard drivers or run a global keyboard hook. This
 adapter uses hidapi; it is not a new kernel driver, vendor command implementation,
 or promise that every proprietary HID report is supported. See upstream
 [hidapi Python API](https://trezor.github.io/cython-hidapi/api.html).
+
+HTTP 429 now pauses all pending events for the configured reader/origin until the server's numeric Retry-After deadline (bounded to one hour, default 60 seconds). Payloads and message IDs are retained. Shared API rate-budget settings and browser recovery are documented in `../docs/clocking-reliability.md`.

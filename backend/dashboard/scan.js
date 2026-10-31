@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   const $ = (id) => document.getElementById(id);
-  let token = null, generation = 0, stream = null, cameraRun = 0, controller = new AbortController();
+  let token = null, owner = null, generation = 0, stream = null, cameraRun = 0, controller = new AbortController();
   let session = new QRClocking.ScanSession(() => crypto.randomUUID());
   function status(text, error = false) { $("scan-status").textContent = text; $("scan-status").classList.toggle("error", error); }
   function stopCamera() {
@@ -16,12 +16,14 @@
   function signOut(text = "Signed out.") {
     generation++;
     controller.abort(); controller = new AbortController();
-    stopCamera(); token = null; session.clear();
+    stopCamera(); token = null; owner = null; session.clear();
+    $("scan-outbox").replaceChildren();
     session = new QRClocking.ScanSession(() => crypto.randomUUID());
     $("scan-workspace").hidden = true; $("scan-login").hidden = false;
     $("scan-account").textContent = "";
     $("scan-entry").replaceChildren(new Option("Select an entry", ""));
     $("scan-login-form").reset(); $("scan-form").reset();
+    for (const id of ['scan-submit','scan-token','scan-entry','scan-source','scan-reload','scan-camera-start','scan-recover']) $(id).disabled=false;
     status(text);
   }
   async function request(path, body) {
@@ -32,8 +34,12 @@
       ...(body ? { body: JSON.stringify(body) } : {}) });
     let data; try { data = await response.json(); } catch { throw new Error("Unconfirmed response. Retry the same scan."); }
     if (version !== generation) throw new DOMException("Session changed", "AbortError");
-    if (response.status === 401 && token) { signOut("Session or clocking token is no longer valid. Sign in and check with your club."); throw new DOMException("Signed out", "AbortError"); }
-    if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Submission rejected. Check your entry and clocking code.");
+    if (response.status === 401 && token && data.detail !== 'Invalid or expired clocking token') { signOut("Session is no longer valid. Sign in to recover receipts."); throw new DOMException("Signed out", "AbortError"); }
+    if (!response.ok) {
+      const error = new Error(response.status === 429 ? `Too many requests. Retry in ${response.headers.get('Retry-After') || '60'} seconds using the same code.` :
+        (typeof data.detail === "string" ? data.detail : "Submission rejected. Check your entry and clocking code."));
+      error.status = response.status; throw error;
+    }
     return data;
   }
   async function loadEntries() {
@@ -49,15 +55,29 @@
     const controls = ["scan-submit", "scan-token", "scan-entry", "scan-source", "scan-reload", "scan-camera-start"];
     controls.forEach((id) => { $(id).disabled = true; });
     try {
-      const result = await session.submit(raw, $("scan-entry").value, source, (body) => request("/clocking/qr/scans", body));
+      const account = owner;
+      const result = await session.submit(raw, $("scan-entry").value, source, async (body) => {
+        if (version !== generation || account !== owner || !token) throw new DOMException('Session changed','AbortError');
+        await QROutbox.update(account, body.idempotency_key, 'sending');
+        try {
+          const reply = await request('/clocking/qr/scans', body);
+          if (!QRClocking.isConfirmed(reply)) throw new Error('Unconfirmed response. Retry the same scan.');
+          await QROutbox.update(account, body.idempotency_key, reply.status === 'invalid' ? 'rejected' : 'received', reply);
+          return reply;
+        } catch (error) {
+          await QROutbox.update(account, body.idempotency_key, [401,403,409,422].includes(error.status) ? 'needs review' : 'queued');
+          throw error;
+        }
+      });
       if (version !== generation) return;
       $("scan-token").value = "";
       status(`Scan received. Status: ${result.status}. Reference: ${result.event_id}. This is not an official result.`);
     } catch (error) {
       if (version === generation && error.name !== "AbortError") status(error instanceof TypeError ? "Connection failed. Retry the same scan." : error.message, true);
     } finally {
-      controls.forEach((id) => { $(id).disabled = false; });
+      if (version === generation) controls.forEach((id) => { $(id).disabled = false; });
       if (version === generation && token) $("scan-token").focus();
+      if (version === generation && owner) await renderOutbox().catch(() => status('Recovery storage is unavailable. Keep the page open and contact your club.', true));
     }
   }
   $("scan-login-form").addEventListener("submit", async (event) => {
@@ -70,9 +90,12 @@
       $("scan-login-form").reset();
       const account = await request("/auth/me");
       if (account.role !== "guest") { signOut("Use your guest account for guest QR clocking."); return; }
+      owner = account.id;
+      if (!owner) throw new Error('Account identity unavailable. Sign in again.');
+      session = new QRClocking.ScanSession(() => crypto.randomUUID(), (parsed, source) => QROutbox.prepare(owner, parsed, source));
       $("scan-account").textContent = account.full_name;
       $("scan-login").hidden = true; $("scan-workspace").hidden = false;
-      await loadEntries(); $("scan-token").focus();
+      await loadEntries(); await renderOutbox().catch(() => status('Recovery storage is unavailable. Scans cannot be sent until storage is available.',true)); $("scan-token").focus();
     } catch (error) { if (version === generation && error.name !== "AbortError") signOut(error.message); }
     finally { button.disabled = false; }
   });
@@ -114,4 +137,39 @@
   });
   document.addEventListener("visibilitychange", () => { if (document.hidden) stopCamera(); });
   window.addEventListener("pagehide", () => signOut("Session closed."));
+  async function renderOutbox() {
+    const account = owner, version = generation;
+    const items = await QROutbox.records(account);
+    if (account !== owner || version !== generation) return;
+    $("scan-outbox").replaceChildren();
+    for (const item of items) {
+      const row = document.createElement('li');
+      row.textContent = `${item.state} · ${item.capture_source} · ${item.idempotency_key}${item.review ? ` · ${item.review}` : ''}`;
+      $("scan-outbox").append(row);
+    }
+  }
+  $("scan-recover").addEventListener('click', async () => {
+    const account = owner, version = generation;
+    if (!account) return;
+    $("scan-recover").disabled = true;
+    try {
+      for (const item of await QROutbox.records(account)) {
+        if (version !== generation) return;
+        try {
+          const receipt = await request(`/clocking/qr/receipts/${item.idempotency_key}`);
+          session.reconcile(item.idempotency_key, receipt);
+          await QROutbox.update(account, item.idempotency_key,
+            receipt.status === 'invalid' || receipt.review_decision === 'reject' ? 'rejected' :
+            receipt.blocking_flags.length ? 'needs review' : 'received', receipt);
+        } catch (error) {
+          if (error.status === 404) await QROutbox.update(account, item.idempotency_key, ['received','rejected','needs review'].includes(item.state) ? 'needs review' : 'queued');
+          else throw error;
+        }
+      }
+      if (version !== generation) return;
+      await renderOutbox();
+      status('Receipts checked. Queued records need the original code rescanned; expired codes or closed races need club review.');
+    } catch (error) { if (version === generation && error.name !== 'AbortError') status(error.message, true); }
+    finally { $("scan-recover").disabled = false; }
+  });
 })();

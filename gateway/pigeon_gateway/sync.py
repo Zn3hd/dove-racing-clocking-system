@@ -33,6 +33,15 @@ def synchronize(queue: Queue, config: Config, token: str, client: httpx.Client, 
             queue.retry(row, f"Authorization blocked (HTTP {response.status_code})", now)
             result["auth_blocked"] = True
             break
+        if response.status_code == 429:
+            try:
+                delay = max(1,min(3600,int(response.headers.get('Retry-After','60'))))
+            except ValueError:
+                delay = 60
+            queue.retry(row, 'Rate limited; scope paused', now)
+            queue.pause(config, now+delay)
+            result['retry'] += 1
+            break
         if response.status_code == 202:
             try:
                 data = response.json()

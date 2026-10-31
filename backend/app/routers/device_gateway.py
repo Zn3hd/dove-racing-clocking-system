@@ -17,6 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from ..auth import require_admin
 from ..database import get_db
+from ..rate_limits import consume, device_ip
 from ..club_access import check_loft_admin, check_entry_membership
 
 router=APIRouter(prefix="/devices",tags=["device-gateway"])
@@ -114,7 +115,7 @@ def provision(device_id: UUID, actor: dict=Depends(require_admin),
     return {"device_id":device_id,"device_token":secret,
             "warning":"Token displayed once. Store securely; HTTPS required. Prototype only."}
 
-@router.post("/{device_id}/arrivals",status_code=202)
+@router.post("/{device_id}/arrivals",status_code=202,dependencies=[Depends(device_ip)])
 def receive_arrival(device_id: UUID,payload: GatewayArrival,
                     x_device_token: str | None=Header(default=None),
                     db: Session=Depends(get_db)):
@@ -136,6 +137,7 @@ def receive_arrival(device_id: UUID,payload: GatewayArrival,
         """),{"id":device_id}).mappings().first()
         if not device or device["status"]!="active" or device["revoked_at"] is not None or not hmac.compare_digest(device["secret_hash"],digest(x_device_token)):
             raise HTTPException(401,"Device authentication failed")
+        consume('device_scan_device', device_id, 600)
         if device['reader_adapter'] != 'unspecified' and (
                 payload.adapter_type != device['reader_adapter'] or payload.protocol != device['reader_protocol']):
             raise HTTPException(422, 'Reader adapter/protocol does not match registered configuration')

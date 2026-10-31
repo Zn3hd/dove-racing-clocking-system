@@ -7,6 +7,7 @@
   <title>Pigeon Racing Clocking System · Club administration</title>
   <link rel="stylesheet" href="/dashboard/styles.css">
   <script src="/dashboard/app.js" defer></script>
+  <script src="/dashboard/operations.js" defer></script>
 </head>
 <body>
   <noscript>This dashboard requires JavaScript. Enable JavaScript to sign in and manage your club.</noscript>
@@ -34,13 +35,14 @@
     <aside class="sidebar">
       <a class="brand" href="/dashboard/"><span class="brand-mark" aria-hidden="true">P</span><span>PIGEON RACING<small>CLOCKING SYSTEM</small></span></a>
       <div class="club-label"><span class="eyebrow">YOUR CLUB</span><strong id="sidebar-club">Club workspace</strong></div>
-      <nav aria-label="Workspace"><button id="members-nav" class="nav-item selected" type="button" aria-current="page">Members</button><button id="live-nav" class="nav-item" type="button">Live race</button></nav>
+      <nav aria-label="Workspace"><button id="members-nav" class="nav-item selected" type="button" aria-current="page">Members</button><button id="operations-nav" class="nav-item" type="button">Race operations</button><button id="live-nav" class="nav-item" type="button">Live race</button></nav>
       <div class="sidebar-bottom"><p class="pilot-label"><span></span> Development pilot</p><p>Race timing and official results are still under development.</p><a href="/docs" target="_blank" rel="noopener">API documentation ↗</a></div>
     </aside>
     <div class="main-shell">
       <header class="topbar"><span>Club administration <span class="crumb">/ Members</span></span><div class="account"><span id="account-name"></span><button id="password-button" class="text-button" type="button">Change password</button><button id="logout-button" class="outline small" type="button">Sign out</button></div></header>
       <main class="content">
         <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+        <section id="operations-view" hidden aria-label="Race operations"></section>
         <div id="members-view">
         <section class="page-heading"><div><p class="eyebrow">YOUR RACING COMMUNITY</p><h1>Club members</h1><p class="muted" id="club-description">Manage the people behind every flight.</p></div><button id="add-member-button" class="primary" type="button" disabled>＋ Add member</button></section>
         <section id="club-setup" class="setup-card" hidden><div class="setup-symbol" aria-hidden="true">↗</div><div><h2>Give your club a home.</h2><p>No club is assigned to this administrator. Create the first club to get started, or contact its administrator if one already exists.</p><button id="create-club-button" class="primary" type="button">Create racing club</button></div></section>

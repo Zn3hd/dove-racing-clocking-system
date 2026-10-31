@@ -2,6 +2,8 @@
 (function (root) {
   "use strict";
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const isConfirmed = result => Boolean(result && uuid.test(result.event_id) &&
+    ['pending','invalid'].includes(result.status) && result.official_result_created === false);
   function parseScan(raw, selectedEntry) {
     if (typeof raw !== "string" || raw.length > 1024 || !uuid.test(selectedEntry)) {
       throw new Error("Select a race entry and scan a valid clocking QR code.");
@@ -22,8 +24,12 @@
   }
 
   class ScanSession {
-    constructor(makeId) { this.makeId = makeId; this.attempts = new Map(); this.busy = false; }
+    constructor(makeId, prepare = null) { this.makeId = makeId; this.prepare = prepare; this.attempts = new Map(); this.busy = false; }
     clear() { this.attempts.clear(); }
+    reconcile(key, receipt) {
+      if (!isConfirmed(receipt)) return;
+      for (const attempt of this.attempts.values()) if (attempt.body.idempotency_key === key) attempt.result = receipt;
+    }
     async submit(raw, entry, source, send) {
       if (this.busy) throw new Error("A scan is already being submitted.");
       if (!["usb_qr", "web_camera", "manual"].includes(source)) throw new Error("Unknown scan source.");
@@ -31,22 +37,22 @@
       const identity = JSON.stringify(parsed);
       let attempt = this.attempts.get(identity);
       if (attempt?.result) return attempt.result;
-      if (!attempt) {
-        if (this.attempts.size >= 100) throw new Error("Session scan limit reached. Sign out before starting another session.");
-        attempt = { body: { ...parsed, capture_source: source, idempotency_key: this.makeId() } };
-        this.attempts.set(identity, attempt);
-      }
       this.busy = true;
       try {
+        if (!attempt) {
+          if (this.attempts.size >= 100) throw new Error("Session scan limit reached. Sign out before starting another session.");
+          attempt = { body: this.prepare ? await this.prepare(parsed, source) :
+            { ...parsed, capture_source: source, idempotency_key: this.makeId() } };
+          this.attempts.set(identity, attempt);
+        }
         const result = await send(attempt.body);
-        if (!result || !uuid.test(result.event_id) || !["pending", "invalid", "valid"].includes(result.status)
-            || result.official_result_created === true) throw new Error("Unconfirmed response. Retry the same scan.");
+        if (!isConfirmed(result)) throw new Error("Unconfirmed response. Retry the same scan.");
         attempt.result = result;
         return result;
       } finally { this.busy = false; }
     }
   }
-  const api = { parseScan, ScanSession };
+  const api = { parseScan, ScanSession, isConfirmed };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.QRClocking = api;
 })(globalThis);

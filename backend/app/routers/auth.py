@@ -5,6 +5,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from ..auth import current_user, issue_token, verify_password, hash_password
 from ..database import get_db
+from ..rate_limits import consume, login_ip
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -12,8 +13,9 @@ class LoginRequest(BaseModel):
     email: str
     password: str
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(login_ip)])
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
+    consume('login_account', payload.email.strip().lower(), 10)
     row = db.execute(text("""SELECT id,password_hash,status FROM users
         WHERE lower(email)=lower(:email)"""), {"email": payload.email.strip()}).mappings().first()
     # Avoid revealing whether an email address exists.

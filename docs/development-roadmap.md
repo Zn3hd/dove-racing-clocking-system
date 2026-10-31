@@ -105,3 +105,7 @@ do not restart it merely to match a planning folder sketch.
 - Apply the same policy to direct UUID lookups and alternate clocking routes.
 - Test permission failures and successful flows against real PostgreSQL.
 - Do not mark tenant isolation complete based only on the `/clubs` endpoints.
+
+## Local reliability follow-up (awaiting approval)
+
+The four planned milestones are implemented locally: QR transaction serialization, durable no-secret browser receipt recovery, shared PostgreSQL rate limits (migration 013), and administrator Race operations. See `clocking-reliability.md`. Browser tests now exercise the full administration path and reload recovery with real APIs/database. Do not interpret this local status as deployment or physical hardware acceptance.

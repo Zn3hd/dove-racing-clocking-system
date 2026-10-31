@@ -32,7 +32,7 @@ def page():
         browser.close()
 
 
-def serve(page, *, lost_response=False, guest=True):
+def serve(page, *, lost_response=False, guest=True, rate_limited=False):
     attempts = []
     def route_request(route):
         path = route.request.url.split('http://localhost:8123')[-1]
@@ -40,12 +40,15 @@ def serve(page, *, lost_response=False, guest=True):
         if path == '/auth/login':
             payload = {'access_token': 'test-guest-session'}
         elif path == '/auth/me':
-            payload = {'role': 'guest' if guest else 'member', 'full_name': 'Test guest'}
+            payload = {'id':'00000000-0000-0000-0000-000000000009','role': 'guest' if guest else 'member', 'full_name': 'Test guest'}
         elif path == '/clocking/qr/entries':
             payload = [{'entry_id': ENTRY, 'race_name': 'Test race', 'official_ring_number': 'PH-0001'}]
         elif path == '/clocking/qr/scans':
             assert route.request.headers['authorization'] == 'Bearer test-guest-session'
             attempts.append(route.request.post_data_json)
+            if rate_limited and len(attempts) == 1:
+                route.fulfill(status=429, headers={'Retry-After':'1'}, json={'detail':'Too many requests'})
+                return
             if lost_response and len(attempts) == 1:
                 route.abort('connectionfailed')
                 return
@@ -134,4 +137,23 @@ def test_non_guest_cannot_open_scanning_workspace(page):
     attempts = serve(page, guest=False)
     page.get_by_text('Use your guest account', exact=False).wait_for()
     assert page.locator('#scan-workspace').is_hidden()
+    assert attempts == []
+
+
+def test_rate_limit_retries_keep_durable_submission_id(page):
+    attempts = serve(page, rate_limited=True)
+    page.locator('#scan-token').fill(TOKEN)
+    page.locator('#scan-token').press('Enter')
+    page.get_by_text('Too many requests. Retry in 1 seconds using the same code.', exact=True).wait_for()
+    page.locator('#scan-token').press('Enter')
+    page.get_by_text('Scan received.', exact=False).wait_for()
+    assert attempts[0] == attempts[1]
+
+
+def test_storage_failure_prevents_unrecoverable_submission(page):
+    page.add_init_script("Object.defineProperty(window,'indexedDB',{value:{open:()=>{throw new Error('Storage disabled');}}});")
+    attempts = serve(page)
+    page.locator('#scan-token').fill(TOKEN)
+    page.locator('#scan-token').press('Enter')
+    page.get_by_text('Recovery storage is unavailable.', exact=False).wait_for()
     assert attempts == []

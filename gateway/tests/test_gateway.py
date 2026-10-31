@@ -157,3 +157,23 @@ def test_capture_mode_raw_scan_and_safe_diagnostics(tmp_path):
         assert payload['capture_mode'] == 'simulated'
     finally:
         queue.close()
+
+
+def test_rate_limit_pauses_entire_reader_scope(tmp_path):
+    cfg = config(tmp_path)
+    queue = Queue(cfg.queue_path)
+    try:
+        queue.enqueue(cfg, next(Simulator(['001']).readings()))
+        queue.enqueue(cfg, next(Simulator(['002']).readings()))
+        attempts = []
+        def rate_limit(request):
+            attempts.append(request)
+            return httpx.Response(429, headers={'Retry-After':'60'})
+        with httpx.Client(transport=httpx.MockTransport(rate_limit)) as client:
+            assert synchronize(queue,cfg,'test-token',client,100000000000)['retry'] == 1
+            assert synchronize(queue,cfg,'test-token',client,100000000030)['retry'] == 0
+        assert len(attempts) == 1
+        assert queue.counts() == {'pending':2}
+        assert len(queue.due(cfg,100000000060)) == 2
+    finally:
+        queue.close()

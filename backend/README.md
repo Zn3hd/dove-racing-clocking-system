@@ -3,7 +3,7 @@
 This branch implements PostgreSQL-backed race management, authenticated chairman/president routes, and participant registration. It is **not production ready**; no RFID/QR official clocking endpoints are active.
 
 ## Local setup
-1. Create a dedicated PostgreSQL database. After installing requirements and setting the environment below, run `python -m scripts.run_migrations` to apply migrations `001` through `012`. The runner requires a fresh database or its existing migration ledger; see `../docs/render-postgres-migrations.md` for existing databases.
+1. Create a dedicated PostgreSQL database. After installing requirements and setting the environment below, run `python -m scripts.run_migrations` to apply migrations `001` through `013`. The runner requires a fresh database or its existing migration ledger; see `../docs/render-postgres-migrations.md` for existing databases.
 2. Set `DATABASE_URL` and a randomly generated `JWT_SECRET_KEY` (48+ characters) in your environment. Copy `.env.example` to local `.env` if useful; environment variables must be loaded into the process before running.
 3. Bootstrap the first chairman using environment variables `BOOTSTRAP_ADMIN_NAME`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` (12+ characters), then run from `backend/`: `python -m scripts.bootstrap_admin`. This script refuses to run if any administrator already exists. Unset bootstrap credentials afterward.
 4. Install requirements: `python -m pip install -r requirements.txt`
@@ -19,7 +19,7 @@ This branch implements PostgreSQL-backed race management, authenticated chairman
 
 ## Remaining security and reliability work
 - Integration tests with real PostgreSQL, including rollback and concurrent registration.
-- Login rate limiting, password reset, account lockout, secure HTTPS and token revocation.
+- Password reset, account lockout, deployment HTTPS configuration and token revocation. Shared login/submission rate limits are implemented in migration 013.
 - Permissions scoped to each participant's own data; club/multi-club tenancy.
 - Stronger loft verification process, RFID ring assignment, QR token issuance and clocking review.
 - Alembic migrations, schema versioning, and validated deployment configuration.
@@ -51,7 +51,7 @@ Example guest scan JSON:
 
 GitHub Actions now starts a disposable PostgreSQL 16 service, applies the actual `sql/001_schema.sql` and `sql/002_seed.sql` files, and runs the full pytest suite. `tests/test_postgres_e2e.py` exercises real API requests and persistent data for race creation, opening, registration, activation, guest ownership, QR token rotation, idempotency, RFID simulation, and review rejection. The CI database uses **test-only credentials** and is destroyed after the job.
 
-To run locally, use a **dedicated disposable database**, apply migrations `001` through `012`, install the gateway for cross-component tests with `python -m pip install -e ../gateway`, set `DATABASE_URL` and `TEST_DATABASE_URL` to that database and a 48+ character `JWT_SECRET_KEY`, then run `python -m pytest -q`. Never point integration tests at production or a database containing real club records.
+To run locally, use a **dedicated disposable database**, apply migrations `001` through `013`, install the gateway for cross-component tests with `python -m pip install -e ../gateway`, set `DATABASE_URL` and `TEST_DATABASE_URL` to that database and a 48+ character `JWT_SECRET_KEY`, then run `python -m pytest -q`. Never point integration tests at production or a database containing real club records.
 
 Integration suite status must be verified in GitHub Actions; committed tests are not evidence of passing tests. Remaining scenarios include concurrency races, expired tokens, offline hardware, race finalization, and first-valid-arrival selection.
 
@@ -125,3 +125,7 @@ QR, web/mobile, SMS, Messenger, simulated RFID, and device gateway ingestion che
 CI applies migration `008` and includes PostgreSQL tests for creation, membership, duplicate requests, concurrent additions, audit records, and access denial. Without `TEST_DATABASE_URL`, those integration tests are skipped. For database-free checks, set `DATABASE_URL` to a placeholder PostgreSQL URL (for example `postgresql+psycopg://test:test@127.0.0.1/dove_test`) and run `python -m pytest -q`; this does not verify database behavior.
 
 Migration `012` adds an optional loft `address` (500 characters), editable in the Members GPS dialog and shown with the coordinates. It is a user-entered place label; GPS capture does not automatically look up an address.
+
+## Reliability and Race operations
+
+Apply migration `013` before running this local revision. The new Race operations tab supports pigeon/ring registration, race setup/registration/release/close, private QR PNG issuance and revocation, evidence review and physical guest verification. The guest page has a durable no-secret recovery ledger and an authenticated receipt lookup. PostgreSQL rate budgets are shared across instances. See `../docs/clocking-reliability.md` for configuration, policy, tests and limitations. These local changes have not been approved for deployment.

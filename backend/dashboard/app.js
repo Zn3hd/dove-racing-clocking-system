@@ -12,6 +12,7 @@ function message(text, failure = false) {
 }
 
 function signOut(reason = "") {
+  window.Operations?.clear();
   locationDraft.request += 1;
   Object.assign(locationDraft, { userId: null, loft: null, source: "manual", accuracy: null,
     capturedAt: null, changed: false, pending: false });
@@ -27,7 +28,7 @@ function signOut(reason = "") {
     loading: false, loadError: false });
   document.querySelectorAll("dialog").forEach((dialog) => {
     dialog.close();
-    dialog.querySelector("form").reset();
+    dialog.querySelector("form")?.reset();
   });
   $("#workspace").hidden = true;
   $("#login-screen").hidden = false;
@@ -292,13 +293,15 @@ function showView(view) {
   stopLive();
   $("#members-view").hidden = view !== "members";
   $("#live-view").hidden = view !== "live";
-  for (const name of ["members", "live"]) {
+  $("#operations-view").hidden = view !== "operations";
+  for (const name of ["members", "live", "operations"]) {
     $(`#${name}-nav`).classList.toggle("selected", name === view);
     if (name === view) $(`#${name}-nav`).setAttribute("aria-current", "page");
     else $(`#${name}-nav`).removeAttribute("aria-current");
   }
-  $(".crumb").textContent = view === "live" ? "/ Live race" : "/ Members";
+  $(".crumb").textContent = view === "live" ? "/ Live race" : view === "operations" ? "/ Race operations" : "/ Members";
   if (view === "live") { live.active = true; loadRaces(); }
+  if (view === 'operations') window.Operations.load();
 }
 
 function resetLive(text) {

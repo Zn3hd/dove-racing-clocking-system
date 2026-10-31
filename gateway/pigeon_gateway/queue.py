@@ -69,6 +69,11 @@ class Queue:
     def counts(self):
         return dict(self.db.execute("SELECT status,count(*) FROM events GROUP BY status").fetchall())
 
+    def pause(self, config, until):
+        with self.db:
+            self.db.execute('''UPDATE events SET next_attempt=max(next_attempt,?) WHERE status='pending'
+                AND origin=? AND device=?''', (until,config.backend_url.rstrip('/'),config.device_id))
+
     def diagnostics(self, config: Config):
         rows = self.db.execute('''SELECT status,count(*) AS count,min(created) AS oldest,
             max(created) AS latest,max(attempts) AS max_attempts FROM events

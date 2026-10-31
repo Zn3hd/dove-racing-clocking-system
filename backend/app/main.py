@@ -33,6 +33,8 @@ app.mount("/dashboard", StaticFiles(directory=Path(__file__).resolve().parents[1
 @app.middleware("http")
 async def dashboard_headers(request, call_next):
     response = await call_next(request)
+    if request.url.path.startswith(('/auth','/clocking','/races','/participants','/lofts','/pigeons','/devices','/clubs')):
+        response.headers['Cache-Control'] = 'no-store'
     if request.url.path.startswith("/dashboard"):
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self'; "
