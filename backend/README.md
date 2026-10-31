@@ -69,6 +69,13 @@ timezone-aware and remain untrusted. Official finalization remains disabled.
 
 ## Dashboard access
 
+The **Live race** tab polls club-authorized `GET /races/{race_id}/live` every
+three seconds and displays first eligible arrival, distance, speed, arrival
+order, and provisional rank. Automatic/simulated RFID may appear without review;
+operator/manual/unknown evidence requires approval. Rejected evidence is
+excluded. Reader capture mode is a declaration, not verified timing. No official
+results are written. See `../docs/universal-clocking-status.md` for limits.
+
 Open `/dashboard/` on the backend host (or `/`, which redirects there). The
 dashboard uses the existing administrator login and same-origin API. No frontend
 build or additional service is required. The first milestone supports creating

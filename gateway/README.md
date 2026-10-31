@@ -69,6 +69,7 @@ simulator device during testing. Never simulate against a real race.
 # Offline simulator; does not require a token or contact the backend:
 python -m pigeon_gateway --config config.local.json simulate --tag 00001234
 python -m pigeon_gateway --config config.local.json status
+python -m pigeon_gateway --config config.local.json diagnostics
 
 # After injecting PIGEON_DEVICE_TOKEN into the process environment:
 python -m pigeon_gateway --config config.local.json sync --once
@@ -111,6 +112,22 @@ used by the backend; offline claims are not automatically backdated. Simulator
 provenance is explicit. These events remain pending and never automatically
 become official results. Reader registration is a configuration declaration,
 not proof that a device or clock is authentic.
+
+## Automatic versus operator capture
+
+Set `capture_mode` to `automatic` only for an installation intended to detect
+passages without operator presentation. Its default is `operator`. Simulator
+events always use `simulated`, regardless of this setting. Events preserve the
+original scan as well as the normalized tag; neither is printed by diagnostics.
+Passive diagnostics show configured identity, queue counts/ages, and attempt
+counts, with `hardware_connection=not_probed`; they do not claim a reader is
+connected. Active connection monitoring is a future milestone.
+
+Open the dashboard's **Live race** view to see first eligible RFID events and
+provisional speed rankings refresh automatically. Operator/manual/unknown scans
+require review before entering these rankings. Automatic mode is declared by
+the configured gateway, not verified by the server. See
+`../docs/universal-clocking-status.md` for exact selection and timing rules.
 
 ## Tests
 

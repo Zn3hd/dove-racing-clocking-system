@@ -12,6 +12,9 @@ function message(text, failure = false) {
 }
 
 function signOut(reason = "") {
+  stopLive();
+  live.raceId = "";
+  resetLive("Select a race to see its arrivals.");
   state.controller.abort();
   state.controller = new AbortController();
   clearTimeout(state.timer);
@@ -186,6 +189,7 @@ $("#login-form").addEventListener("submit", async (event) => {
     $("#account-name").textContent = user.full_name;
     $("#login-screen").hidden = true;
     $("#workspace").hidden = false;
+    showView("members");
     $("#search").value = "";
     $("#role-filter").value = "all";
     message("");
@@ -257,3 +261,125 @@ $("#logout-button").addEventListener("click", () => signOut());
 $("#refresh-button").addEventListener("click", () => { message(""); loadClub(); });
 $("#search").addEventListener("input", renderPeople);
 $("#role-filter").addEventListener("change", renderPeople);
+
+const live = { active: false, timer: null, version: 0, raceId: "" };
+
+function stopLive() {
+  live.active = false;
+  live.version += 1;
+  clearTimeout(live.timer);
+}
+
+function showView(view) {
+  stopLive();
+  $("#members-view").hidden = view !== "members";
+  $("#live-view").hidden = view !== "live";
+  for (const name of ["members", "live"]) {
+    $(`#${name}-nav`).classList.toggle("selected", name === view);
+    if (name === view) $(`#${name}-nav`).setAttribute("aria-current", "page");
+    else $(`#${name}-nav`).removeAttribute("aria-current");
+  }
+  $(".crumb").textContent = view === "live" ? "/ Live race" : "/ Members";
+  if (view === "live") { live.active = true; loadRaces(); }
+}
+
+function resetLive(text) {
+  $("#live-rows").replaceChildren();
+  $("#live-state").textContent = text;
+  $("#live-state").hidden = false;
+  $("#live-total").textContent = "-";
+  $("#live-arrived").textContent = "-";
+  $("#live-status").textContent = "-";
+  $("#live-release").textContent = "Release not loaded";
+  $("#live-updated").textContent = "Not synchronized";
+}
+
+async function loadRaces() {
+  const version = ++live.version;
+  clearTimeout(live.timer);
+  resetLive("Loading races...");
+  $("#reload-races").disabled = true;
+  $("#live-feed-state").textContent = "Loading races...";
+  try {
+    const races = await api("/races");
+    if (!live.active || version !== live.version) return;
+    const selector = $("#live-race");
+    selector.replaceChildren(element("option", "", "Select a race"));
+    selector.firstChild.value = "";
+    for (const race of races) {
+      const option = element("option", "", `${race.name} (${race.status})`);
+      option.value = race.id;
+      selector.append(option);
+    }
+    live.raceId = races.some((race) => race.id === live.raceId) ? live.raceId :
+      (races.find((race) => race.status === "active")?.id || "");
+    selector.value = live.raceId;
+    if (live.raceId) await pollLive(version);
+    else {
+      resetLive(races.length ? "Select a race to see its arrivals." : "No races are available for your account. Create a race through the API to begin this pilot.");
+      $("#live-feed-state").textContent = "No race selected";
+    }
+  } catch (error) {
+    if (error.name !== "AbortError" && version === live.version) {
+      resetLive("Unable to load races. Select Reload races to retry.");
+      $("#live-feed-state").textContent = error.message;
+    }
+  } finally { $("#reload-races").disabled = false; }
+}
+
+function renderLive(data) {
+  $("#live-total").textContent = String(data.registered_entries);
+  $("#live-arrived").textContent = String(data.arrived_entries);
+  $("#live-status").textContent = data.race_status;
+  $("#live-release").textContent = data.release_at ? `Released ${new Date(data.release_at).toLocaleString()}` : "Not released";
+  $("#live-updated").textContent = `Updated ${new Date(data.updated_at).toLocaleTimeString()}`;
+  const body = $("#live-rows");
+  body.replaceChildren();
+  for (const row of data.entries) {
+    const tr = element("tr");
+    const rank = element("td");
+    rank.append(element("span", "person-name", row.rank === null ? "Below minimum" : `#${row.rank}`),
+      element("span", "person-email", row.leaderboard));
+    const bird = element("td");
+    bird.append(element("span", "person-name", row.official_ring_number), element("span", "person-email", row.owner_name));
+    const arrival = element("td");
+    arrival.append(element("span", "person-name", `Arrival #${row.arrival_order}`),
+      element("span", "person-email", new Date(row.arrival_at).toLocaleString()));
+    const evidence = element("td");
+    evidence.append(element("span", "badge", `${row.capture_mode} / ${row.clocking_method}`),
+      element("span", "person-email", `${row.reviewed ? "Reviewed" : "Unreviewed"} · ${row.offline_buffered ? "Buffered / " : ""}server time`));
+    tr.append(rank, bird, arrival, element("td", "", `${(row.distance_meters / 1000).toFixed(3)} km`),
+      element("td", "", `${row.display_speed.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${data.speed_unit}`), evidence);
+    body.append(tr);
+  }
+  $("#live-state").hidden = data.entries.length > 0;
+  $("#live-state").textContent = data.release_at ? "Waiting for eligible arrivals. Unreviewed operator/manual scans are excluded." : "This race has not been released.";
+  $("#live-feed-state").textContent = data.possibly_truncated ? "Showing the first 1,000 eligible entries" : "Connected · refreshes every 3 seconds";
+}
+
+async function pollLive(version = live.version) {
+  if (!live.active || !live.raceId || !state.token || version !== live.version) return;
+  try {
+    const data = await api(`/races/${encodeURIComponent(live.raceId)}/live`);
+    if (live.active && version === live.version) renderLive(data);
+  } catch (error) {
+    if (error.name !== "AbortError" && version === live.version) {
+      // Keep last received rows visible but explicitly mark them stale.
+      $("#live-feed-state").textContent = `Not synchronized · showing last received data. ${error.message}`;
+    }
+  } finally {
+    if (live.active && state.token && version === live.version) live.timer = setTimeout(() => pollLive(version), 3000);
+  }
+}
+
+$("#members-nav").addEventListener("click", () => showView("members"));
+$("#live-nav").addEventListener("click", () => showView("live"));
+$("#reload-races").addEventListener("click", loadRaces);
+$("#live-race").addEventListener("change", () => {
+  clearTimeout(live.timer);
+  live.version += 1;
+  live.raceId = $("#live-race").value;
+  resetLive(live.raceId ? "Loading arrivals..." : "Select a race to see its arrivals.");
+  $("#live-feed-state").textContent = live.raceId ? "Connecting..." : "No race selected";
+  pollLive();
+});

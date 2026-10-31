@@ -5,6 +5,7 @@ arrival per entry wins; unreviewed and rejected events are excluded.
 This endpoint never writes to race_results or finalizes a race.
 """
 from uuid import UUID
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -13,6 +14,69 @@ from ..database import get_db
 from ..calculations import speed_mpm, convert_speed, leaderboard
 
 router = APIRouter(prefix="/races", tags=["results-preview"])
+
+
+@router.get('/{race_id}/live')
+def live_race(race_id: UUID, db: Session = Depends(get_db),
+              actor: dict = Depends(require_race_admin)):
+    """Live provisional standings from first eligible server-received evidence.
+
+    Automatic is a device's declared capture mode, never hardware attestation.
+    Unreviewed operator/unknown captures and manual claims are not auto-ranked.
+    """
+    race = db.execute(text('''SELECT id,name,status,actual_release_at,minimum_speed_mpm,
+        guest_ranking_mode,display_speed_unit FROM races WHERE id=:id'''),
+        {'id': race_id}).mappings().one()
+    total = db.execute(text("SELECT count(*) FROM race_entries WHERE race_id=:id AND status='registered'"),
+                       {'id': race_id}).scalar_one()
+    rows = []
+    if race['actual_release_at'] is not None:
+        events = db.execute(text('''SELECT DISTINCT ON (e.id)
+            e.id AS entry_id,e.pigeon_id,e.loft_id,e.distance_meters,e.expected_method AS clocking_method,
+            p.official_ring_number,u.full_name AS owner_name,c.id AS event_id,c.recorded_at AS arrival_at,
+            c.device_id,c.metadata,gv.decision AS physical_verification,
+            EXISTS(SELECT 1 FROM clocking_reviews cr WHERE cr.event_id=c.id AND cr.decision='approve') AS reviewed
+            FROM race_entries e JOIN clocking_events c ON c.entry_id=e.id
+            JOIN pigeons p ON p.id=e.pigeon_id JOIN lofts l ON l.id=e.loft_id JOIN users u ON u.id=l.user_id
+            LEFT JOIN guest_arrival_verifications gv ON gv.event_id=c.id
+            WHERE e.race_id=:race AND e.status='registered' AND c.status IN ('pending','valid')
+              AND c.recorded_at>:release AND (gv.decision IS NULL OR gv.decision='confirmed')
+              AND NOT EXISTS(SELECT 1 FROM clocking_reviews cr WHERE cr.event_id=c.id AND cr.decision='reject')
+              AND ((c.method='RFID' AND (
+                    c.metadata->>'capture_mode'='automatic' OR c.metadata->>'simulated'='true'))
+                   OR EXISTS(SELECT 1 FROM clocking_reviews cr WHERE cr.event_id=c.id AND cr.decision='approve'))
+            ORDER BY e.id,c.recorded_at,c.id LIMIT 1000'''),
+            {'race': race_id, 'release': race['actual_release_at']}).mappings().all()
+        for event in events:
+            velocity = speed_mpm(float(event['distance_meters']), race['actual_release_at'], event['arrival_at'])
+            metadata = event['metadata'] or {}
+            rows.append({key: event[key] for key in ('entry_id','pigeon_id','loft_id','clocking_method',
+                'official_ring_number','owner_name','event_id','arrival_at','device_id','reviewed')})
+            rows[-1].update({
+                'distance_meters': float(event['distance_meters']), 'speed_mpm': velocity,
+                'display_speed': round(convert_speed(velocity, race['display_speed_unit']), 4),
+                'flight_duration_seconds': (event['arrival_at'] - race['actual_release_at']).total_seconds(),
+                'qualifying_status': 'qualified' if velocity >= float(race['minimum_speed_mpm']) else 'below_minimum',
+                'verification_status': 'provisional', 'timestamp_policy': 'server_receipt',
+                'capture_mode': 'simulated' if metadata.get('simulated') else metadata.get('capture_mode', 'unknown'),
+                'offline_buffered': bool(metadata.get('offline_buffered', False)),
+                'device_recorded_at': metadata.get('device_recorded_at'),
+                'physical_verification': event['physical_verification'] or 'not_recorded'})
+    ranked = leaderboard(rows, race['guest_ranking_mode'])
+    ranks = {row['entry_id']: (row['rank'], row['leaderboard']) for row in ranked}
+    for order, row in enumerate(sorted(rows, key=lambda r: (r['arrival_at'], str(r['entry_id']))), 1):
+        row['arrival_order'] = order
+        row['rank'], row['leaderboard'] = ranks.get(row['entry_id'], (None,
+            'combined' if race['guest_ranking_mode'] == 'combined' else
+            ('guest' if row['clocking_method'] == 'QR' else 'member')))
+    rows.sort(key=lambda row: (row['leaderboard'], row['rank'] is None, row['rank'] or 0, row['arrival_order']))
+    return {'race_id': race_id, 'race_name': race['name'], 'race_status': race['status'],
+            'release_at': race['actual_release_at'], 'official': False,
+            'updated_at': datetime.now(timezone.utc), 'speed_unit': race['display_speed_unit'],
+            'registered_entries': total, 'arrived_entries': len(rows), 'limit': 1000,
+            'possibly_truncated': len(rows) == 1000, 'entries': rows,
+            'note': 'Provisional server-receipt timing. Automatic mode is declared, not verified. '
+                    'Operator/manual captures require review; simulator scans are labeled. Official finalization is disabled.'}
 
 @router.get("/{race_id}/leaderboard-preview")
 def preview_leaderboard(race_id: UUID, db: Session = Depends(get_db),

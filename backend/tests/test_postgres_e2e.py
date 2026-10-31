@@ -483,6 +483,74 @@ def test_dynamic_reader_registration_and_provisional_arrival(scenario, tmp_path)
         queue.close()
 
 
+def test_live_race_first_eligible_arrival_and_review_policy(scenario):
+    s = scenario
+    c = s['client']
+    admin = s['headers'](s['admin'])
+    with s['engine'].begin() as db:
+        db.execute(text("UPDATE users SET role_code='president' WHERE id=:id"), {'id': s['other']})
+    race = make_race(s)
+    member_entry = register(s, race, s['pigeon_member'], 'RFID')
+    guest_entry = register(s, race, s['pigeon_guest'], 'QR')
+    live_url = f'/races/{race}/live'
+    assert c.get(live_url, headers=s['headers'](s['other'])).status_code == 403
+    before = c.get(live_url, headers=admin)
+    assert before.status_code == 200
+    assert before.json()['registered_entries'] == 2
+    assert before.json()['entries'] == []
+    token = c.post('/clocking/qr/tokens', headers=admin, json={'entry_id': guest_entry}).json()['token']
+    assert c.post(f'/races/{race}/activate', headers=admin).status_code == 200
+    with s['engine'].begin() as db:
+        db.execute(text("UPDATE races SET actual_release_at=now()-interval '5 minutes' WHERE id=:id"), {'id': race})
+    credentials = c.post(f"/devices/{s['device']}/provision", headers=admin)
+    device_headers = {'X-Device-Token': credentials.json()['device_token']}
+    endpoint = f"/devices/{s['device']}/arrivals"
+    base = {'race_id': race, 'ring_uid': f"RFID-{s['ring']}", 'adapter_type': 'serial',
+            'protocol': 'ascii-newline-v1', 'original_scan': f"RFID-{s['ring']}",
+            'device_recorded_at': '2026-01-01T00:00:00+00:00', 'offline_buffered': True}
+    operator = c.post(endpoint, headers=device_headers, json={**base,
+        'message_id': str(uuid4()), 'capture_mode': 'operator'})
+    assert operator.status_code == 202
+    assert c.get(live_url, headers=admin).json()['entries'] == []
+    automatic_payload = {**base, 'message_id': str(uuid4()), 'capture_mode': 'automatic'}
+    automatic = c.post(endpoint, headers=device_headers, json=automatic_payload)
+    assert automatic.status_code == 202, automatic.text
+    assert c.post(endpoint, headers=device_headers, json=automatic_payload).json()['duplicate_request'] is True
+    assert c.post(endpoint, headers=device_headers, json={**automatic_payload,
+        'original_scan': 'different-raw-value'}).status_code == 409
+    later = c.post(endpoint, headers=device_headers, json={**automatic_payload, 'message_id': str(uuid4())})
+    assert later.status_code == 202
+    live = c.get(live_url, headers=admin).json()
+    assert live['official'] is False
+    assert live['arrived_entries'] == 1
+    row = live['entries'][0]
+    assert row['entry_id'] == member_entry
+    assert row['event_id'] == automatic.json()['event_id']
+    assert row['capture_mode'] == 'automatic'
+    assert row['timestamp_policy'] == 'server_receipt'
+    assert row['rank'] == row['arrival_order'] == 1
+    assert row['speed_mpm'] == pytest.approx(row['distance_meters'] / (row['flight_duration_seconds'] / 60))
+    assert row['reviewed'] is False
+    guest = c.post('/clocking/qr/scans', headers=s['headers'](s['guest']), json={
+        'entry_id': guest_entry, 'token': token, 'idempotency_key': str(uuid4())})
+    assert guest.status_code == 202
+    assert c.get(live_url, headers=admin).json()['arrived_entries'] == 1
+    assert c.post(f"/clocking/events/{guest.json()['event_id']}/review", headers=admin,
+                  json={'decision': 'approve', 'reason': 'Guest evidence reviewed'}).status_code == 200
+    assert c.get(live_url, headers=admin).json()['arrived_entries'] == 2
+    assert c.post(f"/clocking/events/{automatic.json()['event_id']}/review", headers=admin,
+                  json={'decision': 'reject', 'reason': 'Reader evidence rejected'}).status_code == 200
+    updated = c.get(live_url, headers=admin).json()
+    member = next(row for row in updated['entries'] if row['entry_id'] == member_entry)
+    assert member['event_id'] == later.json()['event_id']
+    assert c.post(f"/clocking/events/{guest.json()['event_id']}/guest-verification", headers=admin,
+        json={'decision': 'rejected', 'ring_number_seen': 'wrong-ring',
+              'evidence_note': 'Physical inspection rejected this arrival'}).status_code == 201
+    assert c.get(live_url, headers=admin).json()['arrived_entries'] == 1
+    assert c.post(f'/races/{race}/close', headers=admin).status_code == 200
+    assert c.post(f'/races/{race}/finalize', headers=admin).status_code == 409
+
+
 def make_race(s):
     c=s["client"]
     headers=s["headers"](s["admin"])

@@ -34,7 +34,9 @@ class Queue:
                    "ring_uid": normalize_tag(reading.tag, config.normalization),
                    "device_recorded_at": reading.observed_at.isoformat(),
                    "offline_buffered": True, "adapter_type": config.adapter,
-                   "protocol": config.protocol}
+                   "protocol": config.protocol,
+                   "capture_mode": 'simulated' if config.adapter == 'simulator' else config.capture_mode,
+                   "original_scan": reading.tag.rstrip('\r\n')}
         with self.db:
             self.db.execute("INSERT INTO events(id,origin,device,payload,created) VALUES (?,?,?,?,?)",
                 (message_id, config.backend_url.rstrip("/"), config.device_id,
@@ -64,3 +66,15 @@ class Queue:
 
     def counts(self):
         return dict(self.db.execute("SELECT status,count(*) FROM events GROUP BY status").fetchall())
+
+    def diagnostics(self, config: Config):
+        rows = self.db.execute('''SELECT status,count(*) AS count,min(created) AS oldest,
+            max(created) AS latest,max(attempts) AS max_attempts FROM events
+            WHERE origin=? AND device=? GROUP BY status''',
+            (config.backend_url.rstrip('/'), config.device_id)).fetchall()
+        return {'device_id': config.device_id, 'adapter': config.adapter,
+                'protocol': config.protocol, 'capture_mode': config.capture_mode,
+                'hardware_connection': 'not_probed',
+                'queue': {row['status']: {'count': row['count'],
+                    'oldest_queued_at': row['oldest'], 'latest_queued_at': row['latest'],
+                    'max_attempts': row['max_attempts']} for row in rows}}

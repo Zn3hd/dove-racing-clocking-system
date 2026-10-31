@@ -32,6 +32,7 @@ def main():
     simulator = commands.add_parser("simulate", help="Queue test scans without a reader or network")
     simulator.add_argument("--tag", action="append", required=True)
     commands.add_parser("status", help="Show local queue counts without printing tag IDs")
+    commands.add_parser("diagnostics", help="Show configured reader and queue health without probing hardware")
     sync = commands.add_parser("sync", help="Deliver queued evidence")
     sync.add_argument("--once", action="store_true")
     commands.add_parser("run", help="Capture configured keyboard/serial reader and synchronize")
@@ -44,6 +45,9 @@ def main():
         queue = Queue(config.queue_path)
         if args.command == "status":
             print(json.dumps(queue.counts()))
+            return
+        if args.command == "diagnostics":
+            print(json.dumps(queue.diagnostics(config)))
             return
         if args.command == "simulate":
             if config.adapter != "simulator":

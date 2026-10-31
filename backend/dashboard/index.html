@@ -34,13 +34,14 @@
     <aside class="sidebar">
       <a class="brand" href="/dashboard/"><span class="brand-mark" aria-hidden="true">P</span><span>PIGEON RACING<small>CLOCKING SYSTEM</small></span></a>
       <div class="club-label"><span class="eyebrow">YOUR CLUB</span><strong id="sidebar-club">Club workspace</strong></div>
-      <nav aria-label="Workspace"><button class="nav-item selected" type="button" aria-current="page"><span aria-hidden="true">◫</span> Members</button></nav>
+      <nav aria-label="Workspace"><button id="members-nav" class="nav-item selected" type="button" aria-current="page">Members</button><button id="live-nav" class="nav-item" type="button">Live race</button></nav>
       <div class="sidebar-bottom"><p class="pilot-label"><span></span> Development pilot</p><p>Race timing and official results are still under development.</p><a href="/docs" target="_blank" rel="noopener">API documentation ↗</a></div>
     </aside>
     <div class="main-shell">
       <header class="topbar"><span>Club administration <span class="crumb">/ Members</span></span><div class="account"><span id="account-name"></span><button id="password-button" class="text-button" type="button">Change password</button><button id="logout-button" class="outline small" type="button">Sign out</button></div></header>
       <main class="content">
         <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+        <div id="members-view">
         <section class="page-heading"><div><p class="eyebrow">YOUR RACING COMMUNITY</p><h1>Club members</h1><p class="muted" id="club-description">Manage the people behind every flight.</p></div><button id="add-member-button" class="primary" type="button" disabled>＋ Add member</button></section>
         <section id="club-setup" class="setup-card" hidden><div class="setup-symbol" aria-hidden="true">↗</div><div><h2>Give your club a home.</h2><p>No club is assigned to this administrator. Create the first club to get started, or contact its administrator if one already exists.</p><button id="create-club-button" class="primary" type="button">Create racing club</button></div></section>
         <section class="stats" aria-label="Club statistics"><article><span>All participants</span><strong id="stat-total">—</strong><small>Members and guests</small></article><article><span>Active members</span><strong id="stat-members">—</strong><small>Registered club members</small></article><article><span>Active guests</span><strong id="stat-guests">—</strong><small>Guest participants</small></article></section>
@@ -49,6 +50,18 @@
           <div class="table-wrap"><table><thead><tr><th scope="col">Participant</th><th scope="col">Role</th><th scope="col">Phone</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody id="member-rows"></tbody></table></div>
           <div id="directory-state" class="directory-state" role="status">Sign in to load your club.</div>
           <footer class="directory-footer"><span id="visible-count">No participants loaded</span><span>Club access is managed by your administrator</span></footer>
+        </section>
+        </div>
+        <section id="live-view" hidden aria-labelledby="live-heading">
+          <div class="page-heading"><div><p class="eyebrow">FROM THE LOFT TO THE FINISH</p><h1 id="live-heading">Live race</h1><p class="muted">First eligible arrivals. Rankings update every 3 seconds while this view is open.</p></div><span class="badge guest">Provisional results</span></div>
+          <div class="live-controls"><label>Race<select id="live-race"><option value="">Select a race</option></select></label><button id="reload-races" class="outline" type="button">Reload races</button></div>
+          <p class="field-help">Rank is based on speed, not arrival order. Timing uses server receipt, including buffered uploads. Automatic capture is device-declared; operator/manual scans require review. Simulated scans are labeled.</p>
+          <div class="stats"><article><span>Registered pigeons</span><strong id="live-total">-</strong><small id="live-release">Release not loaded</small></article><article><span>Eligible arrivals</span><strong id="live-arrived">-</strong><small>One first eligible event per entry</small></article><article><span>Race status</span><strong id="live-status" class="race-status">-</strong><small id="live-updated">Not synchronized</small></article></div>
+          <section class="members-card" aria-labelledby="standings-heading"><div class="directory-header"><div><h2 id="standings-heading">Live standings</h2><p class="muted">Distance comes from the registered release and loft coordinates.</p></div></div>
+            <div class="table-wrap"><table><thead><tr><th scope="col">Rank / group</th><th scope="col">Pigeon / owner</th><th scope="col">Arrival order / time</th><th scope="col">Distance</th><th scope="col">Speed</th><th scope="col">Evidence</th></tr></thead><tbody id="live-rows"></tbody></table></div>
+            <div id="live-state" class="directory-state" role="status">Select a race to see its arrivals.</div>
+            <footer class="directory-footer"><span id="live-feed-state" role="status" aria-live="polite">No race selected</span><span>Official finalization is disabled</span></footer>
+          </section>
         </section>
         <p class="workspace-foot">PIGEON RACING CLOCKING SYSTEM <span>Built around your club. Ready for the next flight.</span></p>
       </main>

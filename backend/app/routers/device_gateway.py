@@ -32,6 +32,8 @@ class GatewayArrival(BaseModel):
     device_recorded_at: datetime | None = None
     adapter_type: Literal['simulator','usb_hid','serial','network'] | None = None
     protocol: str | None = Field(default=None, min_length=1, max_length=120)
+    capture_mode: Literal['automatic','operator','simulated'] | None = None
+    original_scan: str | None = Field(default=None, min_length=1, max_length=1024)
 
     @field_validator('device_recorded_at')
     @classmethod
@@ -120,11 +122,11 @@ def receive_arrival(device_id: UUID,payload: GatewayArrival,
         raise HTTPException(401,"Device token required")
     event_id=uuid4()
     # Keep legacy hashes identical for clients that omit the new optional fields.
-    envelope = payload.model_dump(mode="json", exclude={'adapter_type','protocol'})
-    if payload.adapter_type is not None:
-        envelope['adapter_type'] = payload.adapter_type
-    if payload.protocol is not None:
-        envelope['protocol'] = payload.protocol
+    optional = {'adapter_type','protocol','capture_mode','original_scan'}
+    envelope = payload.model_dump(mode="json", exclude=optional)
+    for field in optional:
+        if getattr(payload, field) is not None:
+            envelope[field] = getattr(payload, field)
     fingerprint=digest(json.dumps(envelope,sort_keys=True))
     with db.begin():
         device=db.execute(text("""
@@ -137,6 +139,10 @@ def receive_arrival(device_id: UUID,payload: GatewayArrival,
         if device['reader_adapter'] != 'unspecified' and (
                 payload.adapter_type != device['reader_adapter'] or payload.protocol != device['reader_protocol']):
             raise HTTPException(422, 'Reader adapter/protocol does not match registered configuration')
+        if payload.capture_mode == 'simulated' and payload.adapter_type != 'simulator':
+            raise HTTPException(422, 'Simulated capture requires the simulator adapter')
+        if payload.adapter_type == 'simulator' and payload.capture_mode not in (None, 'simulated'):
+            raise HTTPException(422, 'Simulator events cannot claim physical automatic capture')
         prior=db.execute(text("""
             SELECT payload_hash,event_id FROM device_gateway_messages
             WHERE device_id=:device AND message_id=:message
@@ -168,6 +174,8 @@ def receive_arrival(device_id: UUID,payload: GatewayArrival,
             raise HTTPException(409,"Race has not been released")
         metadata=json.dumps({"gateway":"universal-python" if payload.adapter_type else "esp32-prototype",
                              "adapter_type":payload.adapter_type,"protocol":payload.protocol,
+                             "capture_mode":payload.capture_mode or 'unknown',
+                             "original_scan":payload.original_scan,
                              "simulated":payload.adapter_type == 'simulator',
                              "offline_buffered":payload.offline_buffered,
                              "device_recorded_at":payload.device_recorded_at.isoformat() if payload.device_recorded_at else None,

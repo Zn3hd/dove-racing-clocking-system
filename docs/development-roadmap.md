@@ -56,6 +56,11 @@ tag namespace policy, signed/tamper-resistant offline evidence, and trusted timi
 acceptance rules. Dynamic integration does not imply universal hardware support.
 See `../gateway/README.md` for setup and current constraints.
 
+Live provisional standings and gateway capture provenance are now implemented;
+see `universal-clocking-status.md` for the checklist, eligibility policy, and
+remaining hardware/monitoring milestones. The gateway foundation already exists;
+do not restart it merely to match a planning folder sketch.
+
 1. Complete security cleanup: rotate the exposed administrator password and JWT
    secret privately, remove bootstrap environment credentials, verify setup is
    disabled, and test token invalidation behavior. Never put secrets in this file.

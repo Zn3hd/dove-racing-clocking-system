@@ -135,3 +135,25 @@ def test_malformed_acknowledgement_does_not_drop_evidence(tmp_path):
         assert synchronize(queue, cfg, 'test-token', client, 100000000000)['retry'] == 1
     assert queue.counts() == {'pending': 1}
     queue.close()
+
+
+def test_capture_mode_raw_scan_and_safe_diagnostics(tmp_path):
+    cfg = config(tmp_path, adapter='usb_hid', capture_mode='automatic', normalization='hex')
+    queue = Queue(cfg.queue_path)
+    try:
+        queue.enqueue(cfg, next(Simulator(['00:ab-12']).readings()))
+        row = queue.due(cfg, 100000000000)[0]
+        payload = json.loads(row['payload'])
+        assert payload['ring_uid'] == '00AB12'
+        assert payload['original_scan'] == '00:ab-12'
+        assert payload['capture_mode'] == 'automatic'
+        diagnostic = queue.diagnostics(cfg)
+        assert diagnostic['hardware_connection'] == 'not_probed'
+        assert diagnostic['queue']['pending']['count'] == 1
+        assert '00:ab-12' not in json.dumps(diagnostic)
+        simulator_cfg = config(tmp_path, capture_mode='automatic')
+        queue.enqueue(simulator_cfg, next(Simulator(['001']).readings()))
+        payload = json.loads(queue.due(simulator_cfg, 100000000000)[0]['payload'])
+        assert payload['capture_mode'] == 'simulated'
+    finally:
+        queue.close()

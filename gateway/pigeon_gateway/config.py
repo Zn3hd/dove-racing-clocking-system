@@ -18,6 +18,7 @@ class Config:
     serial_port: str | None = None
     baudrate: int = 9600
     allow_local_http: bool = False
+    capture_mode: str = "operator"
 
     def __post_init__(self):
         url = urlsplit(self.backend_url)
@@ -33,6 +34,8 @@ class Config:
             raise ValueError("Unsupported adapter; network readers require a documented protocol adapter")
         if self.normalization not in ("preserve", "upper", "hex"):
             raise ValueError("Unknown tag normalization policy")
+        if self.capture_mode not in ('operator', 'automatic'):
+            raise ValueError("capture_mode must be operator or automatic")
         if not self.protocol.strip() or len(self.protocol) > 120:
             raise ValueError("Configure a nonblank protocol label (maximum 120 characters)")
         if self.adapter == "serial" and not self.serial_port:
