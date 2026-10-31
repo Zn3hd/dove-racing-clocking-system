@@ -1,4 +1,4 @@
-"""ESP32-compatible prototype ingestion gateway.
+"""Hardware-independent, ESP32-compatible provisional ingestion gateway.
 
 Uses a per-device opaque bearer token over TLS (hashed at rest), not an
 attested clock. Arrival time is server receipt time. Offline buffered events
@@ -10,8 +10,9 @@ import json
 import secrets
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
+from typing import Literal
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from ..auth import require_admin
@@ -29,6 +30,59 @@ class GatewayArrival(BaseModel):
     ring_uid: str = Field(min_length=1,max_length=200)
     offline_buffered: bool = False
     device_recorded_at: datetime | None = None
+    adapter_type: Literal['simulator','usb_hid','serial','network'] | None = None
+    protocol: str | None = Field(default=None, min_length=1, max_length=120)
+
+    @field_validator('device_recorded_at')
+    @classmethod
+    def aware_timestamp(cls, value):
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError('Reader timestamps must include a timezone')
+        return value
+
+
+class ReaderCreate(BaseModel):
+    loft_id: UUID
+    device_identifier: str = Field(min_length=1, max_length=200)
+    reader_adapter: Literal['simulator','usb_hid','serial','network']
+    reader_protocol: str = Field(min_length=1, max_length=120)
+
+    @field_validator('device_identifier','reader_protocol')
+    @classmethod
+    def nonblank(cls, value):
+        if not value.strip():
+            raise ValueError('Value must not be blank')
+        return value.strip()
+
+
+@router.post('', status_code=201)
+def register_reader(payload: ReaderCreate, actor: dict=Depends(require_admin),
+                    db: Session=Depends(get_db)):
+    from sqlalchemy.exc import IntegrityError
+    device_id = uuid4()
+    try:
+        with db.begin():
+            check_loft_admin(db, actor, payload.loft_id)
+            db.execute(text('''INSERT INTO devices(id,loft_id,device_identifier,reader_adapter,reader_protocol)
+                VALUES (:id,:loft_id,:device_identifier,:reader_adapter,:reader_protocol)'''),
+                {'id': device_id, **payload.model_dump()})
+            db.execute(text('''INSERT INTO audit_logs(actor_id,action,entity_type,entity_id)
+                VALUES (:actor,'device.registered','device',:id)'''),
+                {'actor': actor['id'], 'id': device_id})
+    except IntegrityError as exc:
+        raise HTTPException(409, 'Identifier already registered or loft already has an active reader') from exc
+    return {'id': device_id, **payload.model_dump(), 'status': 'active'}
+
+
+@router.get('')
+def list_readers(actor: dict=Depends(require_admin), db: Session=Depends(get_db)):
+    rows = db.execute(text('''SELECT d.id,d.loft_id,d.device_identifier,d.status,d.last_seen_at,
+        d.reader_adapter,d.reader_protocol FROM devices d JOIN lofts l ON l.id=d.loft_id
+        WHERE EXISTS(SELECT 1 FROM club_memberships a JOIN club_memberships m ON m.club_id=a.club_id
+            WHERE a.user_id=:actor AND a.club_role='admin' AND m.user_id=l.user_id
+            AND m.club_role IN ('member','guest'))
+        ORDER BY d.device_identifier LIMIT 1000'''), {'actor': actor['id']}).mappings().all()
+    return [dict(row) for row in rows]
 
 @router.post("/{device_id}/provision")
 def provision(device_id: UUID, actor: dict=Depends(require_admin),
@@ -65,15 +119,24 @@ def receive_arrival(device_id: UUID,payload: GatewayArrival,
     if not x_device_token or len(x_device_token)>256:
         raise HTTPException(401,"Device token required")
     event_id=uuid4()
-    fingerprint=digest(json.dumps(payload.model_dump(mode="json"),sort_keys=True))
+    # Keep legacy hashes identical for clients that omit the new optional fields.
+    envelope = payload.model_dump(mode="json", exclude={'adapter_type','protocol'})
+    if payload.adapter_type is not None:
+        envelope['adapter_type'] = payload.adapter_type
+    if payload.protocol is not None:
+        envelope['protocol'] = payload.protocol
+    fingerprint=digest(json.dumps(envelope,sort_keys=True))
     with db.begin():
         device=db.execute(text("""
-            SELECT d.loft_id,d.status,g.secret_hash,g.revoked_at
+            SELECT d.loft_id,d.status,d.reader_adapter,d.reader_protocol,g.secret_hash,g.revoked_at
             FROM devices d JOIN device_gateway_credentials g ON g.device_id=d.id
             WHERE d.id=:id FOR UPDATE OF d
         """),{"id":device_id}).mappings().first()
         if not device or device["status"]!="active" or device["revoked_at"] is not None or not hmac.compare_digest(device["secret_hash"],digest(x_device_token)):
             raise HTTPException(401,"Device authentication failed")
+        if device['reader_adapter'] != 'unspecified' and (
+                payload.adapter_type != device['reader_adapter'] or payload.protocol != device['reader_protocol']):
+            raise HTTPException(422, 'Reader adapter/protocol does not match registered configuration')
         prior=db.execute(text("""
             SELECT payload_hash,event_id FROM device_gateway_messages
             WHERE device_id=:device AND message_id=:message
@@ -103,7 +166,10 @@ def receive_arrival(device_id: UUID,payload: GatewayArrival,
         now=datetime.now(timezone.utc)
         if now<=race["actual_release_at"]:
             raise HTTPException(409,"Race has not been released")
-        metadata=json.dumps({"gateway":"esp32-prototype","offline_buffered":payload.offline_buffered,
+        metadata=json.dumps({"gateway":"universal-python" if payload.adapter_type else "esp32-prototype",
+                             "adapter_type":payload.adapter_type,"protocol":payload.protocol,
+                             "simulated":payload.adapter_type == 'simulator',
+                             "offline_buffered":payload.offline_buffered,
                              "device_recorded_at":payload.device_recorded_at.isoformat() if payload.device_recorded_at else None,
                              "timestamp_trusted":False})
         db.execute(text("""

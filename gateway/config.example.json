@@ -1,0 +1,9 @@
+{
+  "backend_url": "https://dove-racing-clocking-system.onrender.com",
+  "device_id": "00000000-0000-0000-0000-000000000001",
+  "race_id": "00000000-0000-0000-0000-000000000002",
+  "adapter": "simulator",
+  "protocol": "test-tag-text-v1",
+  "normalization": "preserve",
+  "queue_path": "gateway-queue.sqlite3"
+}

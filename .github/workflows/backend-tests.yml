@@ -37,7 +37,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install -e ../gateway
       - name: Apply real PostgreSQL schema and seed
         run: |
           python - <<'PY'
@@ -53,6 +55,7 @@ jobs:
               conn.execute(Path("sql/006_multichannel_clocking.sql").read_text())
               conn.execute(Path("sql/007_messenger_links.sql").read_text())
               conn.execute(Path("sql/008_clubs.sql").read_text())
+              conn.execute(Path("sql/009_reader_adapters.sql").read_text())
           PY
       - name: Compile Python source (catch syntax errors)
         run: python -m compileall -q app tests
@@ -65,3 +68,18 @@ jobs:
           name: backend-pytest-results
           path: backend/pytest-results.xml
           if-no-files-found: warn
+  gateway:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e ".[test]"
+      - run: python -m pytest -q

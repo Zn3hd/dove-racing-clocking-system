@@ -163,6 +163,39 @@ class PigeonEdit(BaseModel):
     status: Literal["active", "retired", "disqualified"]
 
 
+class RingAssign(BaseModel):
+    uid: str = Field(min_length=1, max_length=200)
+
+    @field_validator('uid')
+    @classmethod
+    def exact_tag(cls, value):
+        if not value.isprintable() or value != value.strip():
+            raise ValueError('Use the exact normalized, printable tag identifier')
+        return value
+
+
+@router.post('/pigeons/{pigeon_id}/rfid', status_code=201)
+def assign_ring(pigeon_id: UUID, payload: RingAssign,
+                 db: Session = Depends(get_db), actor: dict = Depends(require_admin)):
+    ring_id = uuid4()
+    try:
+        with db.begin():
+            pigeon = db.execute(text('''SELECT p.loft_id,p.status,l.verified_at,u.status AS owner_status
+                FROM pigeons p JOIN lofts l ON l.id=p.loft_id JOIN users u ON u.id=l.user_id
+                WHERE p.id=:id FOR UPDATE OF p'''), {'id': pigeon_id}).mappings().first()
+            if pigeon is None:
+                raise HTTPException(404, 'Pigeon not found')
+            check_loft_admin(db, actor, pigeon['loft_id'])
+            if pigeon['status'] != 'active' or pigeon['owner_status'] != 'active' or pigeon['verified_at'] is None:
+                raise HTTPException(422, 'Active pigeon/owner and verified loft required')
+            db.execute(text('INSERT INTO rfid_rings(id,pigeon_id,uid) VALUES (:id,:pigeon,:uid)'),
+                       {'id': ring_id, 'pigeon': pigeon_id, 'uid': payload.uid})
+            audit_edit(db, actor, 'rfid_ring.assigned', 'pigeon', pigeon_id)
+    except IntegrityError as exc:
+        raise HTTPException(409, 'Pigeon or RFID identifier already has an active ring assignment') from exc
+    return {'id': ring_id, 'pigeon_id': pigeon_id, 'uid': payload.uid}
+
+
 def audit_edit(db: Session, actor: dict, action: str, entity: str, entity_id: UUID):
     db.execute(text("""INSERT INTO audit_logs(actor_id,action,entity_type,entity_id)
         VALUES (:actor,:action,:entity,:id)"""),

@@ -59,14 +59,15 @@ def scenario(monkeypatch):
         ids = [admin,guest,other,member] + data["extra_user_ids"]
         pigeon_ids = db.execute(text("""SELECT p.id FROM pigeons p JOIN lofts l ON l.id=p.loft_id
             WHERE l.user_id=ANY(:ids)"""), {"ids": ids}).scalars().all()
+        device_ids = db.execute(text("SELECT d.id FROM devices d JOIN lofts l ON l.id=d.loft_id WHERE l.user_id=ANY(:ids)"), {"ids": ids}).scalars().all()
         db.execute(text("DELETE FROM audit_logs WHERE actor_id = ANY(:ids)"), {"ids":ids})
         db.execute(text("DELETE FROM messenger_account_links WHERE user_id = ANY(:ids)"), {"ids":ids})
         db.execute(text("""DELETE FROM guest_arrival_verifications WHERE verified_by = ANY(:ids)"""), {"ids":ids})
-        db.execute(text("DELETE FROM device_gateway_messages WHERE device_id=:device"), {"device":device})
-        db.execute(text("DELETE FROM device_gateway_credentials WHERE device_id=:device"), {"device":device})
+        db.execute(text("DELETE FROM device_gateway_messages WHERE device_id=ANY(:devices)"), {"devices":device_ids})
+        db.execute(text("DELETE FROM device_gateway_credentials WHERE device_id=ANY(:devices)"), {"devices":device_ids})
         db.execute(text("""DELETE FROM clocking_reviews WHERE reviewed_by = ANY(:ids)"""), {"ids":ids})
-        db.execute(text("""DELETE FROM clocking_event_sources WHERE event_id IN (SELECT id FROM clocking_events WHERE submitted_by = ANY(:ids) OR device_id=:device)"""), {"ids":ids,"device":device})
-        db.execute(text("""DELETE FROM clocking_events WHERE submitted_by = ANY(:ids) OR device_id=:device"""), {"ids":ids,"device":device})
+        db.execute(text("""DELETE FROM clocking_event_sources WHERE event_id IN (SELECT id FROM clocking_events WHERE submitted_by = ANY(:ids) OR device_id=ANY(:devices))"""), {"ids":ids,"devices":device_ids})
+        db.execute(text("""DELETE FROM clocking_events WHERE submitted_by = ANY(:ids) OR device_id=ANY(:devices)"""), {"ids":ids,"devices":device_ids})
         db.execute(text("""DELETE FROM qr_tokens WHERE pigeon_id = ANY(:ids)"""),
                    {"ids":pigeon_ids})
         db.execute(text("""DELETE FROM race_entries WHERE pigeon_id = ANY(:ids)"""),
@@ -74,8 +75,8 @@ def scenario(monkeypatch):
         db.execute(text("DELETE FROM races WHERE created_by = :id"), {"id":admin})
         db.execute(text("DELETE FROM club_memberships WHERE club_id IN (SELECT id FROM clubs WHERE created_by=:id)"), {"id":admin})
         db.execute(text("DELETE FROM clubs WHERE created_by=:id"), {"id":admin})
-        db.execute(text("DELETE FROM devices WHERE id=:id"), {"id":device})
-        db.execute(text("DELETE FROM rfid_rings WHERE id=:id"), {"id":ring})
+        db.execute(text("DELETE FROM devices WHERE id=ANY(:devices)"), {"devices":device_ids})
+        db.execute(text("DELETE FROM rfid_rings WHERE pigeon_id=ANY(:ids)"), {"ids":pigeon_ids})
         db.execute(text("DELETE FROM pigeons WHERE id = ANY(:ids)"),
                    {"ids":pigeon_ids})
         db.execute(text("DELETE FROM lofts WHERE user_id = ANY(:ids)"), {"ids":ids})
@@ -391,6 +392,95 @@ def test_dashboard_administrator_api_workflow(scenario):
         "password": "integration-password-123"}).status_code == 401
     assert c.post("/auth/login", json={"email": f"{s['admin']}@example.test",
         "password": "dashboard-new-password"}).status_code == 200
+
+
+def test_dynamic_reader_registration_and_provisional_arrival(scenario, tmp_path):
+    s = scenario
+    c = s['client']
+    admin = s['headers'](s['admin'])
+    outsider = s['headers'](s['other'])
+    with s['engine'].begin() as db:
+        db.execute(text("UPDATE users SET role_code='president' WHERE id=:id"), {'id': s['other']})
+    club = c.post('/clubs', headers=admin, json={'name': 'Hardware Independent Club'}).json()['id']
+    for uid in (s['member'], s['guest']):
+        assert c.post(f'/clubs/{club}/members', headers=admin,
+                      json={'user_id': str(uid)}).status_code == 201
+    bird = c.post('/pigeons', headers=admin, json={'loft_id': str(s['loft_guest']),
+                   'official_ring_number': f'TEST-{uuid4()}'})
+    assert bird.status_code == 201
+    pid = bird.json()['id']
+    assert c.post(f'/pigeons/{pid}/rfid', headers=outsider, json={'uid': '00009999'}).status_code == 403
+    assert c.post(f'/pigeons/{pid}/rfid', headers=admin, json={'uid': '00009999'}).status_code == 201
+    assert c.post(f'/pigeons/{pid}/rfid', headers=admin, json={'uid': 'another'}).status_code == 409
+    reader = {'loft_id': str(s['loft_guest']), 'device_identifier': f'USB-TEST-{uuid4()}',
+              'reader_adapter': 'usb_hid', 'reader_protocol': 'ascii-newline-v1'}
+    assert c.post('/devices', headers=outsider, json=reader).status_code == 403
+    registered = c.post('/devices', headers=admin, json=reader)
+    assert registered.status_code == 201, registered.text
+    assert c.post('/devices', headers=admin, json=reader).status_code == 409
+    did = registered.json()['id']
+    assert c.get('/devices', headers=outsider).json() == []
+    assert did in [row['id'] for row in c.get('/devices', headers=admin).json()]
+    # The existing member RFID mapping provides an eligible race entry. Configure
+    # that existing fixture reader as a simulator to test declared provenance.
+    with s['engine'].begin() as db:
+        db.execute(text("UPDATE devices SET reader_adapter='simulator',reader_protocol='test-text-v1' WHERE id=:id"),
+                   {'id': s['device']})
+    race = make_race(s)
+    entry = register(s, race, s['pigeon_member'], 'RFID')
+    assert c.post(f'/races/{race}/activate', headers=admin).status_code == 200
+    credentials = c.post(f"/devices/{s['device']}/provision", headers=admin)
+    token = credentials.json()['device_token']
+    payload = {'message_id': str(uuid4()), 'race_id': race, 'ring_uid': f"RFID-{s['ring']}",
+               'adapter_type': 'simulator', 'protocol': 'test-text-v1',
+               'offline_buffered': True, 'device_recorded_at': '2026-01-01T00:00:00+00:00'}
+    endpoint = f"/devices/{s['device']}/arrivals"
+    headers = {'X-Device-Token': token}
+    assert c.post(endpoint, headers=headers, json={**payload, 'adapter_type': 'serial'}).status_code == 422
+    assert c.post(endpoint, headers=headers, json={**payload, 'device_recorded_at': '2026-01-01T00:00:00'}).status_code == 422
+    first = c.post(endpoint, headers=headers, json=payload)
+    assert first.status_code == 202, first.text
+    repeated = c.post(endpoint, headers=headers, json=payload)
+    assert repeated.status_code == 202
+    assert repeated.json()['event_id'] == first.json()['event_id']
+    assert repeated.json()['duplicate_request'] is True
+    with s['engine'].connect() as db:
+        evidence = db.execute(text('SELECT metadata,recorded_at FROM clocking_events WHERE id=:id'),
+                              {'id': first.json()['event_id']}).mappings().one()
+    assert evidence['metadata']['simulated'] is True
+    assert evidence['metadata']['timestamp_trusted'] is False
+    assert evidence['metadata']['adapter_type'] == 'simulator'
+    assert evidence['metadata']['protocol'] == 'test-text-v1'
+    assert evidence['recorded_at'] > datetime(2026, 1, 1, tzinfo=timezone.utc)
+    # Exercise the actual local queue and synchronizer against the real API/DB.
+    # Lose the first acknowledgement after the server has committed, then retry.
+    import httpx
+    from pigeon_gateway.adapters import Reading
+    from pigeon_gateway.config import Config
+    from pigeon_gateway.queue import Queue
+    from pigeon_gateway.sync import synchronize
+    cfg = Config(backend_url='https://gateway.test', device_id=str(s['device']), race_id=race,
+                 protocol='test-text-v1', queue_path=str(tmp_path / 'queue.sqlite3'))
+    queue = Queue(cfg.queue_path)
+    try:
+        queue.enqueue(cfg, Reading(f"RFID-{s['ring']}", datetime.now(timezone.utc)))
+        deliveries = []
+        def bridge(request):
+            response = c.post(request.url.path, content=request.content,
+                              headers={'Content-Type': 'application/json', 'X-Device-Token': token})
+            assert response.status_code == 202, response.text
+            deliveries.append(response.json())
+            if len(deliveries) == 1:
+                raise httpx.ReadError('Acknowledgement lost after commit', request=request)
+            return httpx.Response(response.status_code, json=response.json())
+        with httpx.Client(transport=httpx.MockTransport(bridge)) as client:
+            assert synchronize(queue, cfg, token, client, 100000000000)['retry'] == 1
+            assert synchronize(queue, cfg, token, client, 100000000003)['sent'] == 1
+        assert deliveries[0]['event_id'] == deliveries[1]['event_id']
+        assert deliveries[1]['duplicate_request'] is True
+        assert queue.counts() == {'sent': 1}
+    finally:
+        queue.close()
 
 
 def make_race(s):

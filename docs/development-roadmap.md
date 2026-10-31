@@ -39,6 +39,23 @@ criteria and have not been validated by a full repository and deployment audit.
 
 ## Next milestones, in order
 
+### Updated RFID architecture
+
+Confirmed direction: a separate hardware-independent Python gateway for
+Windows/Linux laptops and Raspberry Pi, preserving the FastAPI/PostgreSQL backend.
+The `gateway/` component implements the adapter interface, explicit normalization,
+simulator, focused keyboard-emulation input, line-oriented serial input, durable
+SQLite offline evidence, and authenticated replay-safe synchronization. Reader
+registration and tag assignment are club-authorized backend APIs. Migration 009
+adds declared adapter/protocol metadata to readers. Existing gateways retain
+their API contract and replay hashes when optional fields are omitted.
+
+Remaining hardware milestones: protocol-specific network/binary adapters, reader
+discovery, real reader/ring compatibility runs, Raspberry Pi hardware validation,
+tag namespace policy, signed/tamper-resistant offline evidence, and trusted timing
+acceptance rules. Dynamic integration does not imply universal hardware support.
+See `../gateway/README.md` for setup and current constraints.
+
 1. Complete security cleanup: rotate the exposed administrator password and JWT
    secret privately, remove bootstrap environment credentials, verify setup is
    disabled, and test token invalidation behavior. Never put secrets in this file.

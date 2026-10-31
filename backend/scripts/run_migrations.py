@@ -29,8 +29,8 @@ def main() -> None:
         raise SystemExit("DATABASE_URL must be a PostgreSQL connection string")
     url = url.replace("postgresql+psycopg://", "postgresql://", 1)
     paths = sorted(SQL_DIR.glob("[0-9][0-9][0-9]_*.sql"))
-    if len(paths) != 8 or [p.name[:3] for p in paths] != [f"{i:03}" for i in range(1, 9)]:
-        raise RuntimeError("Expected ordered migrations 001 through 008")
+    if len(paths) != 9 or [p.name[:3] for p in paths] != [f"{i:03}" for i in range(1, 10)]:
+        raise RuntimeError("Expected ordered migrations 001 through 009")
 
     with psycopg.connect(url, autocommit=True, connect_timeout=15) as conn:
         conn.execute("SELECT pg_advisory_lock(%s)", (LOCK_ID,))

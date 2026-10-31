@@ -14,6 +14,7 @@ secrets/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.pytest-tmp*/
 .coverage
 
 # Node
@@ -22,6 +23,10 @@ dist/
 
 # Local databases and IDE
 *.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+gateway/config.local.json
+*.egg-info/
 .idea/
 .vscode/
 .DS_Store
