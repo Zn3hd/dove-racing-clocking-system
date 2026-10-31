@@ -31,6 +31,13 @@ class ParticipantCreate(BaseModel):
 
 class LoftLocation(BaseModel):
     name: str = Field(min_length=1, max_length=200)
+    address: str | None = Field(default=None, max_length=500)
+
+    @field_validator('address')
+    @classmethod
+    def clean_address(cls, value):
+        return value.strip() or None if value is not None else None
+
     latitude: float = Field(ge=-90, le=90, allow_inf_nan=False)
     longitude: float = Field(ge=-180, le=180, allow_inf_nan=False)
     coordinate_source: Literal['manual','browser_gps','town_reference'] = 'manual'
@@ -102,11 +109,11 @@ def create_loft(payload: LoftCreate, db: Session = Depends(get_db),
                               {"id":payload.user_id}).scalar_one_or_none()
             if role not in ("member","guest"):
                 raise HTTPException(422,"Loft owner must be an active member or guest")
-            db.execute(text("""INSERT INTO lofts(id,user_id,name,latitude,longitude,coordinate_source,gps_accuracy_m,gps_captured_at)
-                VALUES (:id,:user,:name,:lat,:lon,:source,:accuracy,:captured)"""),
+            db.execute(text("""INSERT INTO lofts(id,user_id,name,address,latitude,longitude,coordinate_source,gps_accuracy_m,gps_captured_at)
+                VALUES (:id,:user,:name,:address,:lat,:lon,:source,:accuracy,:captured)"""),
                 {"id":loft_id,"user":payload.user_id,"name":payload.name,
                  "lat":payload.latitude,"lon":payload.longitude,"source":payload.coordinate_source,
-                 "accuracy":payload.gps_accuracy_m,"captured":payload.gps_captured_at})
+                 "accuracy":payload.gps_accuracy_m,"captured":payload.gps_captured_at,"address":payload.address})
             db.execute(text("""INSERT INTO audit_logs(actor_id,action,entity_type,entity_id)
                 VALUES (:actor,'loft.created','loft',:id)"""),
                 {"actor":actor["id"],"id":loft_id})
@@ -228,7 +235,7 @@ def list_participants(club_id: UUID | None = None, db: Session = Depends(get_db)
 def list_lofts(club_id: UUID | None = None, db: Session = Depends(get_db),
                actor: dict = Depends(require_admin)):
     club = managed_club(db, actor, club_id)
-    rows = db.execute(text("""SELECT l.id,l.user_id,l.name,l.latitude,l.longitude,
+    rows = db.execute(text("""SELECT l.id,l.user_id,l.name,l.address,l.latitude,l.longitude,
         l.verified_at,l.verified_by,l.coordinate_source,l.gps_accuracy_m,l.gps_captured_at FROM lofts l
         JOIN club_memberships m ON m.user_id=l.user_id
         WHERE m.club_id=:club AND m.club_role IN ('member','guest')
@@ -267,7 +274,7 @@ def edit_loft(loft_id: UUID, payload: LoftEdit,
               db: Session = Depends(get_db), actor: dict = Depends(require_admin)):
     with db.begin():
         check_loft_admin(db, actor, loft_id)
-        loft = db.execute(text("SELECT latitude,longitude,verified_at,coordinate_source,gps_accuracy_m,gps_captured_at FROM lofts WHERE id=:id FOR UPDATE"),
+        loft = db.execute(text("SELECT address,latitude,longitude,verified_at,coordinate_source,gps_accuracy_m,gps_captured_at FROM lofts WHERE id=:id FOR UPDATE"),
                           {"id": loft_id}).mappings().one()
         changed = (float(loft["latitude"]) != payload.latitude
                    or float(loft["longitude"]) != payload.longitude
@@ -281,15 +288,17 @@ def edit_loft(loft_id: UUID, payload: LoftEdit,
                 {"id": loft_id}).scalar()
             if busy:
                 raise HTTPException(409, "Loft location or GPS evidence cannot change during an unfinished race")
-        db.execute(text("""UPDATE lofts SET name=:name,latitude=:lat,longitude=:lon,
+        address = payload.address if 'address' in payload.model_fields_set else loft['address']
+        db.execute(text("""UPDATE lofts SET name=:name,address=:address,latitude=:lat,longitude=:lon,
             coordinate_source=:source,gps_accuracy_m=:accuracy,gps_captured_at=:captured,
             verified_at=CASE WHEN :changed THEN NULL ELSE verified_at END,
             verified_by=CASE WHEN :changed THEN NULL ELSE verified_by END WHERE id=:id"""),
             {"id": loft_id, "name": payload.name, "lat": payload.latitude,
              "lon": payload.longitude, "changed": changed,"source":payload.coordinate_source,
-             "accuracy":payload.gps_accuracy_m,"captured":payload.gps_captured_at})
+             "accuracy":payload.gps_accuracy_m,"captured":payload.gps_captured_at,"address":address})
         audit_edit(db, actor, "loft.updated", "loft", loft_id)
     return {"id": loft_id, **payload.model_dump(),
+            "address":address,
             "verified": not changed and loft["verified_at"] is not None}
 
 

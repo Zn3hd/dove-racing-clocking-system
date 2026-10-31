@@ -650,7 +650,7 @@ def test_member_gps_loft_verification_and_distance_snapshot(scenario):
     assert user.status_code == 201
     uid = user.json()['id']
     s['extra_user_ids'].append(UUID(uid))
-    town = {'user_id': uid, 'name': 'Sison reference example', 'latitude': 9.6588,
+    town = {'user_id': uid, 'name': 'Sison reference example', 'address': 'Sison, Surigao del Norte', 'latitude': 9.6588,
             'longitude': 125.5286, 'coordinate_source': 'town_reference'}
     assert c.post('/lofts', headers=outsider, json=town).status_code == 403
     saved = c.post('/lofts', headers=admin, json=town)
@@ -671,6 +671,7 @@ def test_member_gps_loft_verification_and_distance_snapshot(scenario):
     assert record['gps_accuracy_m'] == 8.5
     assert record['gps_captured_at'] is not None
     assert record['coordinate_source'] == 'browser_gps'
+    assert record['address'] == 'Sison, Surigao del Norte'  # Older clients preserve the omitted field.
     # Refreshing the location evidence clears verification even at the same point.
     gps['gps_accuracy_m'] = 6
     assert c.put(f'/lofts/{loft}', headers=admin, json=gps).json()['verified'] is False
@@ -688,6 +689,11 @@ def test_member_gps_loft_verification_and_distance_snapshot(scenario):
                               {'id': entry}).mappings().one()
     assert float(snapshot['loft_latitude']) == gps['latitude']
     assert float(snapshot['distance_meters']) == pytest.approx(expected, abs=.001)
+    address_edit = c.put(f'/lofts/{loft}', headers=admin,
+                         json={**gps, 'address': 'Test barangay, Sison, Surigao del Norte'})
+    assert address_edit.status_code == 200, address_edit.text
+    assert address_edit.json()['address'] == 'Test barangay, Sison, Surigao del Norte'
+    assert address_edit.json()['verified'] is True  # Text correction does not change racing coordinates.
 
 
 def make_race(s):

@@ -130,6 +130,7 @@ function renderPeople() {
     const loft = state.lofts.find((item) => item.user_id === person.id);
     const gps = element("td", "gps-cell");
     gps.append(element("span", "person-name", loft ? `${Number(loft.latitude).toFixed(6)}, ${Number(loft.longitude).toFixed(6)}` : "Not recorded"));
+    if (loft?.address) gps.append(element("span", "person-email loft-address", loft.address));
     if (loft) gps.append(element("span", "person-email", `${loft.verified_at ? "Verified" : "Unverified"} / ${loft.coordinate_source.replaceAll("_", " ")}`));
     const locationButton = element("button", "edit-button location-action", "GPS");
     locationButton.type = "button";
@@ -436,6 +437,7 @@ function openLocation(person, loft) {
     capturedAt: loft?.gps_captured_at || null });
   const form = $("#location-form");
   form.elements.namedItem("name").value = loft?.name || `${person.full_name}'s loft`;
+  form.elements.namedItem("address").value = loft?.address || "";
   form.elements.namedItem("latitude").value = loft ? Number(loft.latitude).toFixed(7) : "";
   form.elements.namedItem("longitude").value = loft ? Number(loft.longitude).toFixed(7) : "";
   $("#location-member").textContent = person.full_name;
@@ -464,6 +466,7 @@ $("#sison-example").addEventListener("click", () => {
   const form = $("#location-form");
   form.elements.namedItem("latitude").value = "9.6588000";
   form.elements.namedItem("longitude").value = "125.5286000";
+  form.elements.namedItem("address").value = "Sison, Surigao del Norte, Philippines (town reference)";
   $("#capture-gps").disabled = false;
   $("#gps-status").textContent = "Sison municipal reference only. This is approximate and cannot verify a racing loft.";
   updateLocationControls();
@@ -501,7 +504,7 @@ $("#capture-gps").addEventListener("click", () => {
 
 bindForm("#location-form", async (data, dialog) => {
   if (locationDraft.pending) throw new Error("Wait for location capture to finish.");
-  const payload = { name: data.name.trim(), latitude: Number(data.latitude), longitude: Number(data.longitude),
+  const payload = { name: data.name.trim(), address: data.address.trim() || null, latitude: Number(data.latitude), longitude: Number(data.longitude),
     coordinate_source: locationDraft.source, gps_accuracy_m: locationDraft.accuracy,
     gps_captured_at: locationDraft.capturedAt };
   if (locationDraft.loft) await post(`/lofts/${locationDraft.loft.id}`, payload, "PUT");

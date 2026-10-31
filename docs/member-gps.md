@@ -7,6 +7,15 @@ Existing locations retain the `manual` source and their verification state.
 
 ## Dashboard workflow
 
+The GPS dialog also stores an optional **Address / place name**, shown beside
+the member's coordinates in the directory. Enter the matching barangay, town,
+province, or street address. GPS capture does not automatically reverse-geocode
+or transmit private coordinates to an external address service. The Sison
+example supplies its public town-reference label. Address-only text corrections
+do not alter coordinates, distance snapshots, or existing GPS verification.
+`address` is optional, trimmed, and limited to 500 characters; omitted fields
+on older API clients preserve an existing address, while explicit null clears it.
+
 1. Sign in and open **Members**. Select **GPS** next to the member or guest.
 2. Enter the loft name and exact decimal latitude/longitude, or select **Use
    this device's location** while physically at that member's loft.

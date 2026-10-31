@@ -8,3 +8,5 @@
 .validation-card{margin-top:24px}.validation-flag{color:#a54250;white-space:normal;min-width:180px;line-height:1.6}.validation-card .directory-footer{line-height:1.7;white-space:normal}
 
 .location-tools{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}.verification-box{border:1px solid #dce7e9;background:#f5f9f9;padding:15px;border-radius:7px}.check-label{display:flex;gap:9px;align-items:flex-start;font-size:11px;line-height:1.6;margin:10px 0 15px}.check-label input{width:auto;margin:3px 0}.gps-cell{font-size:10px;line-height:1.6}.location-action{margin-left:6px}
+
+.loft-address{white-space:normal;max-width:260px;overflow-wrap:anywhere;line-height:1.5}

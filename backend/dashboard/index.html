@@ -78,6 +78,8 @@
     <div class="dialog-heading"><h2>Member loft location</h2><button class="close-dialog" type="button" aria-label="Close">&times;</button></div>
     <p id="location-member" class="muted"></p>
     <label>Loft name<input name="name" required maxlength="200"></label>
+    <label>Address / place name <span class="optional">optional</span><input name="address" maxlength="500" autocomplete="street-address" placeholder="Barangay, Sison, Surigao del Norte, Philippines"></label>
+    <p class="field-help">Enter the address that matches these coordinates. Device location supplies coordinates; it does not automatically identify an address.</p>
     <div class="form-grid"><label>Latitude<input name="latitude" type="number" required min="-90" max="90" step="0.0000001" inputmode="decimal" placeholder="9.6588000"></label><label>Longitude<input name="longitude" type="number" required min="-180" max="180" step="0.0000001" inputmode="decimal" placeholder="125.5286000"></label></div>
     <div class="location-tools"><button id="capture-gps" class="outline small" type="button">Use this device's location</button><button id="sison-example" class="outline small" type="button">Sison town example</button></div>
     <p class="field-help">Use device location only while physically at this member's loft. Your browser will request permission. Review the coordinates before saving. No continuous tracking is used.</p>

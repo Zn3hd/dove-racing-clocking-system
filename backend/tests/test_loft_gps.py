@@ -31,3 +31,11 @@ def test_manual_coordinates_cannot_claim_gps_measurements():
     with pytest.raises(ValidationError):
         LoftLocation(name='Test Loft', latitude=9.6588, longitude=125.5286,
                      coordinate_source='manual', gps_accuracy_m=10)
+
+
+def test_address_is_optional_trimmed_and_bounded():
+    base = {'name': 'Test Loft', 'latitude': 9.6588, 'longitude': 125.5286}
+    assert LoftLocation(**base, address='  Sison, Surigao del Norte  ').address == 'Sison, Surigao del Norte'
+    assert LoftLocation(**base, address='   ').address is None
+    with pytest.raises(ValidationError):
+        LoftLocation(**base, address='x' * 501)
