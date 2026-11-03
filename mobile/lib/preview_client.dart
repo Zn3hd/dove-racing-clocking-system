@@ -60,6 +60,40 @@ http.Client previewClient() {
       };
       return data == null ? bad('Not found', 404) : response(data);
     }
+    if (request.method == 'PATCH' && path.startsWith('/races/')) {
+      final id = Uri.decodeComponent(path.substring('/races/'.length));
+      final index = races.indexWhere((e) => e['id'] == id &&
+          e['club_id'] == demoClubId && e['status'] == 'draft');
+      if (index < 0) return bad('Draft race not found', 404);
+      Map<String, dynamic> body;
+      try {
+        final decoded = jsonDecode(request.body);
+        if (decoded is! Map<String, dynamic>) return bad('Invalid request');
+        body = decoded;
+      } catch (_) { return bad('Invalid JSON'); }
+      const allowed = {'name', 'release_latitude', 'release_longitude',
+        'minimum_speed_mpm', 'maximum_speed_mpm', 'display_speed_unit',
+        'guest_ranking_mode'};
+      if (body.keys.any((key) => !allowed.contains(key))) {
+        return bad('Only draft settings may be edited');
+      }
+      final name = string(body, 'name');
+      final lat = body['release_latitude'];
+      final lng = body['release_longitude'];
+      final min = body['minimum_speed_mpm'];
+      final max = body['maximum_speed_mpm'];
+      if (name == null || name.isEmpty ||
+          lat is! num || !lat.isFinite || lat < -90 || lat > 90 ||
+          lng is! num || !lng.isFinite || lng < -180 || lng > 180 ||
+          min is! num || !min.isFinite || min <= 0 ||
+          max is! num || !max.isFinite || max <= min ||
+          !['m/min', 'm/s', 'km/h'].contains(body['display_speed_unit']) ||
+          !['separate', 'combined'].contains(body['guest_ranking_mode'])) {
+        return bad('Check the draft race settings');
+      }
+      races[index] = {...races[index], ...body};
+      return response(races[index]);
+    }
     if (request.method == 'PATCH' && path.startsWith('/pigeons/')) {
       final id = Uri.decodeComponent(path.substring('/pigeons/'.length));
       final index = pigeons.indexWhere((p) => p['id'] == id &&
