@@ -1,6 +1,6 @@
 # Flutter Web PR previews
 
-This project builds a **read-only demonstration preview** of the Flutter UI on every PR touching mobile code. The preview does **not** contact Render or any production database, and it does not support login or writes. It uses `WEB_PREVIEW=true` with a local mock HTTP client. The Android application continues to use the real API by default.
+This project builds a **interactive demonstration preview** of the Flutter UI on every PR touching mobile code. The preview does **not** contact Render or any production database. It bypasses login and supports **temporary, simulated** participant, pigeon and draft-race creation only; writes remain entirely in browser memory. It uses `WEB_PREVIEW=true` with a stateful local mock HTTP client. The Android application continues to use the real API by default.
 
 ## Automatic checks
 
@@ -26,7 +26,7 @@ flutter pub get
 flutter run -d chrome --dart-define=WEB_PREVIEW=true
 ```
 
-Do not use `WEB_PREVIEW=true` for production Android builds. The web preview is a UI demonstration, not an integration test of FastAPI, CORS, secure browser token storage, QR camera permissions, or RFID hardware. Use a separate staging backend for real browser integration testing. Do not expose production credentials in PR previews.
+Do not use `WEB_PREVIEW=true` for production Android builds. The web preview is an interactive UI sandbox, not an integration test of FastAPI, CORS, secure browser token storage, QR camera permissions, or RFID hardware. Use a separate staging backend for real browser integration testing. Do not expose production credentials in PR previews.
 
 ## Test sequence
 
@@ -36,3 +36,7 @@ Do not use `WEB_PREVIEW=true` for production Android builds. The web preview is 
 4. Install Android debug APK for final on-device authentication and hardware testing.
 
 Once GitHub secrets and variables are configured, push a new commit to the PR branch to re-evaluate the Cloudflare deployment condition. A successful web build alone does not mean the deployment step ran.
+
+## Interactive sandbox testing
+
+Open the PR preview, select **Dove Racing Demo Club**, then try **Register participant**, **Register pigeon** (choose the verified Demo Loft), and **Create draft race**. Successful submissions appear in the corresponding lists. Try missing fields, duplicate email/ring numbers and invalid race speeds to check validation. All changes are local to the current browser session and reset when the page reloads. **No production accounts, pigeons or races are created.** Do not use real personal information or passwords in the demo.
