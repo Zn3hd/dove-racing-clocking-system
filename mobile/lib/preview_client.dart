@@ -60,6 +60,35 @@ http.Client previewClient() {
       };
       return data == null ? bad('Not found', 404) : response(data);
     }
+    if (request.method == 'PATCH' && path.startsWith('/participants/')) {
+      final id = Uri.decodeComponent(path.substring('/participants/'.length));
+      final index = participants.indexWhere((p) => p['id'] == id && p['club_id'] == demoClubId);
+      if (index < 0) return bad('Participant not found', 404);
+      Map<String, dynamic> updates;
+      try {
+        final decoded = jsonDecode(request.body);
+        if (decoded is! Map<String, dynamic>) return bad('Invalid request');
+        updates = decoded;
+      } catch (_) {
+        return bad('Invalid JSON');
+      }
+      if (updates.keys.any((key) => !['full_name', 'email', 'role'].contains(key))) {
+        return bad('Only name, email and role can be edited in preview');
+      }
+      final name = string(updates, 'full_name');
+      final email = string(updates, 'email');
+      final role = string(updates, 'role');
+      if (name == null || name.isEmpty || email == null || !email.contains('@') ||
+          !['member', 'guest'].contains(role)) {
+        return bad('Check participant name, email and role');
+      }
+      if (participants.any((p) => p['id'] != id && p['email'] == email)) {
+        return bad('This demo email is already registered', 409);
+      }
+      participants[index] = {...participants[index],
+        'full_name': name, 'email': email, 'role_code': role};
+      return response(participants[index]);
+    }
     if (request.method != 'POST' ||
         !['/participants', '/pigeons', '/races'].contains(path)) {
       return bad('This action is unavailable in the demo', 403);
