@@ -111,6 +111,17 @@ class _PreviewRaceEditPageState extends State<PreviewRaceEditPage> {
     body: Form(key: form, child: ListView(padding: const EdgeInsets.all(20),
       children: [
         const Text('Sandbox only. Draft races cannot be started or clocked here.'),
+        const SizedBox(height: 12),
+        Card(child: Column(children: [
+          const ListTile(title: Text('Race details'),
+            subtitle: Text('Preview record — editable only while in draft status')),
+          ListTile(title: const Text('Status'),
+            trailing: Text(widget.race['status']?.toString() ?? 'unknown')),
+          ListTile(title: const Text('Race ID'),
+            subtitle: SelectableText(widget.race['id']?.toString() ?? 'unknown')),
+          const ListTile(title: Text('Speed limits'),
+            subtitle: Text('Values are stored in meters per minute; display unit only changes presentation.')),
+        ])),
         const SizedBox(height: 16),
         field('name', 'Race name'),
         field('release_latitude', 'Release latitude', numeric: true),
