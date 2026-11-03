@@ -340,7 +340,6 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
   }
 
   Widget action(String label, IconData icon, ManagementKind kind) =>
-      isWebPreview ? const SizedBox.shrink() :
       Align(alignment: Alignment.centerLeft, child: OutlinedButton.icon(
         onPressed: () => openCreate(kind), icon: Icon(icon), label: Text(label)));
 
@@ -367,8 +366,8 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
             Text(widget.club['description']?.toString() ?? 'Club overview'),
             if (isWebPreview) const Card(child: ListTile(
               leading: Icon(Icons.visibility_outlined),
-              title: Text('Browser preview — demo data'),
-              subtitle: Text('Read-only. No production database access.'),
+              title: Text('Browser preview — interactive sandbox'),
+              subtitle: Text('Try registration forms with temporary demo records. No production access. Reloading resets changes.'),
             )),
             action('Register participant', Icons.person_add, ManagementKind.participant),
             section('Participants', participants,
@@ -383,7 +382,9 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
               (item) => item['name']?.toString() ?? 'Unnamed race',
               (item) => item['status']?.toString() ?? ''),
             const SizedBox(height: 24),
-            const Text('Read-only preview — official clocking is not enabled.'),
+            Text(isWebPreview
+                ? 'Sandbox only — changes reset on reload. Official clocking is not enabled.'
+                : 'Prototype only — official clocking is not enabled.'),
           ]),
         );
       },
