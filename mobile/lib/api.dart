@@ -64,6 +64,19 @@ class RacingApi {
   Future<Map<String, dynamic>> me(String token) async =>
       Map<String, dynamic>.from(await request('/auth/me', token: token));
 
+  Future<List<Map<String, dynamic>>> participants(String token, String clubId) =>
+      _list('/participants?club_id=$clubId', token);
+
+  Future<List<Map<String, dynamic>>> pigeons(String token, String clubId) =>
+      _list('/pigeons?club_id=$clubId', token);
+
+  Future<List<Map<String, dynamic>>> races(String token) =>
+      _list('/races', token);
+
+  Future<List<Map<String, dynamic>>> _list(String path, String token) async =>
+      (await request(path, token: token) as List)
+          .map((item) => Map<String, dynamic>.from(item as Map)).toList();
+
   Future<List<Map<String, dynamic>>> clubs(String token) async =>
       (await request('/clubs', token: token) as List)
           .map((item) => Map<String, dynamic>.from(item as Map)).toList();
