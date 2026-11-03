@@ -28,6 +28,10 @@ class _ManagementFormState extends State<ManagementForm> {
   @override
   void initState() {
     super.initState();
+    if (widget.kind == ManagementKind.race) {
+      fields['minimum_speed_mpm'] = TextEditingController(text: '500');
+      fields['maximum_speed_mpm'] = TextEditingController(text: '3000');
+    }
     lofts = widget.kind == ManagementKind.pigeon
         ? widget.api.lofts(widget.token, widget.clubId)
         : Future.value(<Map<String, dynamic>>[]);
