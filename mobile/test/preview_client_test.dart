@@ -145,6 +145,37 @@ void main() {
     fresh.close();
   });
 
+  test('draft race settings edit validates and resets', () async {
+    final client = previewClient();
+    final endpoint = base.resolve('/races/demo-race');
+    final settings = {
+      'name': 'Updated Draft', 'release_latitude': 15.0,
+      'release_longitude': 122.0, 'minimum_speed_mpm': 500,
+      'maximum_speed_mpm': 2500, 'display_speed_unit': 'km/h',
+      'guest_ranking_mode': 'combined',
+    };
+    final saved = await client.patch(endpoint, body: jsonEncode(settings));
+    expect(saved.statusCode, 200);
+    expect(jsonDecode(saved.body)['status'], 'draft');
+    expect(jsonDecode(saved.body)['guest_ranking_mode'], 'combined');
+    expect((await client.patch(endpoint, body: jsonEncode({
+      ...settings, 'maximum_speed_mpm': 400,
+    }))).statusCode, 400);
+    expect((await client.patch(endpoint, body: jsonEncode({
+      ...settings, 'release_latitude': 100,
+    }))).statusCode, 400);
+    expect((await client.patch(endpoint, body: jsonEncode({
+      ...settings, 'status': 'active',
+    }))).statusCode, 400);
+    expect((await client.patch(base.resolve('/races/unknown'),
+      body: jsonEncode(settings))).statusCode, 404);
+    final fresh = previewClient();
+    final list = await fresh.get(base.resolve('/races'));
+    expect((jsonDecode(list.body) as List).single['name'], 'Demo Draft Race');
+    client.close();
+    fresh.close();
+  });
+
   test('sandbox never reaches network or accepts unknown writes', () async {
     final client = previewClient();
     expect((await client.post(base.resolve('/clocking'), body: '{}')).statusCode, 403);
