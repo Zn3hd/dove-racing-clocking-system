@@ -27,6 +27,8 @@ jobs:
           cache: true
       - name: Generate Android project
         run: flutter create --project-name dove_racing_mobile --platforms android .
+      - name: Remove generated Flutter template test
+        run: rm -f test/widget_test.dart
       - name: Install dependencies
         run: flutter pub get
       - name: Static analysis
