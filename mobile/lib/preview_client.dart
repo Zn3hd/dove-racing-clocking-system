@@ -17,7 +17,10 @@ http.Client previewClient() {
   ];
   final races = <Map<String, dynamic>>[
     {'id': 'demo-race', 'club_id': demoClubId,
-     'name': 'Demo Draft Race', 'status': 'draft'},
+     'name': 'Demo Draft Race', 'status': 'draft',
+     'release_latitude': 14.5, 'release_longitude': 121.0,
+     'minimum_speed_mpm': 500, 'maximum_speed_mpm': 3000,
+     'display_speed_unit': 'm/min', 'guest_ranking_mode': 'separate'},
   ];
   final lofts = <Map<String, dynamic>>[
     {'id': 'demo-loft', 'club_id': demoClubId, 'name': 'Demo Loft',
