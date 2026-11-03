@@ -4,8 +4,9 @@ import 'api.dart';
 import 'session.dart';
 import 'preview_client.dart';
 
-const isWebPreview = bool.fromEnvironment('WEB_PREVIEW', defaultValue: false);
 import 'management_form.dart';
+
+const isWebPreview = bool.fromEnvironment('WEB_PREVIEW', defaultValue: false);
 
 void main() => runApp(const DoveApp());
 
