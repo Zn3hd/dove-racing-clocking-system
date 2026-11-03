@@ -60,6 +60,36 @@ http.Client previewClient() {
       };
       return data == null ? bad('Not found', 404) : response(data);
     }
+    if (request.method == 'PATCH' && path.startsWith('/pigeons/')) {
+      final id = Uri.decodeComponent(path.substring('/pigeons/'.length));
+      final index = pigeons.indexWhere((p) => p['id'] == id &&
+          lofts.any((l) => l['id'] == p['loft_id'] &&
+              l['club_id'] == demoClubId && l['verified_at'] != null));
+      if (index < 0) return bad('Pigeon not found', 404);
+      Map<String, dynamic> updates;
+      try {
+        final decoded = jsonDecode(request.body);
+        if (decoded is! Map<String, dynamic>) return bad('Invalid request');
+        updates = decoded;
+      } catch (_) {
+        return bad('Invalid JSON');
+      }
+      if (updates.keys.any((key) => !['official_ring_number', 'name'].contains(key))) {
+        return bad('Only ring number and name can be edited in preview');
+      }
+      final ring = string(updates, 'official_ring_number');
+      final name = updates['name'];
+      if (ring == null || ring.isEmpty || (name != null && name is! String)) {
+        return bad('Enter a valid ring number and pigeon name');
+      }
+      if (pigeons.any((p) => p['id'] != id && p['official_ring_number'] == ring)) {
+        return bad('This demo ring is already registered', 409);
+      }
+      pigeons[index] = {...pigeons[index],
+        'official_ring_number': ring,
+        'name': name is String && name.trim().isNotEmpty ? name.trim() : null};
+      return response(pigeons[index]);
+    }
     if (request.method == 'PATCH' && path.startsWith('/participants/')) {
       final id = Uri.decodeComponent(path.substring('/participants/'.length));
       final index = participants.indexWhere((p) => p['id'] == id && p['club_id'] == demoClubId);

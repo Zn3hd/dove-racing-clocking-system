@@ -45,6 +45,46 @@ void main() {
     client.close();
   });
 
+  test('edit demo pigeon ring and name with duplicate checks', () async {
+    final client = previewClient();
+    final endpoint = base.resolve('/pigeons/demo-pigeon');
+    final updated = await client.patch(endpoint, body: jsonEncode({
+      'official_ring_number': 'DEMO-2026-UPDATED',
+      'name': 'Updated Pigeon',
+    }));
+    expect(updated.statusCode, 200);
+    expect(jsonDecode(updated.body)['name'], 'Updated Pigeon');
+    final list = await client.get(base.resolve('/pigeons?club_id=$demoClubId'));
+    expect((jsonDecode(list.body) as List).single['official_ring_number'],
+      'DEMO-2026-UPDATED');
+    expect((await client.patch(endpoint, body: jsonEncode({
+      'official_ring_number': '', 'name': 'Invalid',
+    }))).statusCode, 400);
+    expect((await client.patch(endpoint, body: jsonEncode({
+      'official_ring_number': 'DEMO-2026-003', 'loft_id': 'another-loft',
+    }))).statusCode, 400);
+    expect((await client.patch(base.resolve('/pigeons/unknown'),
+      body: jsonEncode({'official_ring_number': 'DEMO-X', 'name': ''}))).statusCode, 404);
+    client.close();
+  });
+
+  test('pigeon edit rejects duplicate ring and resets on new client', () async {
+    final client = previewClient();
+    await client.post(base.resolve('/pigeons'), body: jsonEncode({
+      'loft_id': 'demo-loft', 'official_ring_number': 'DEMO-2026-002',
+      'name': 'Another Pigeon',
+    }));
+    final conflict = await client.patch(base.resolve('/pigeons/demo-pigeon'),
+      body: jsonEncode({'official_ring_number': 'DEMO-2026-002', 'name': 'Bad'}));
+    expect(conflict.statusCode, 409);
+    final fresh = previewClient();
+    final list = await fresh.get(base.resolve('/pigeons?club_id=$demoClubId'));
+    expect((jsonDecode(list.body) as List).single['official_ring_number'],
+      'DEMO-2026-001');
+    client.close();
+    fresh.close();
+  });
+
   test('create draft race; reject invalid speed and coordinates', () async {
     final client = previewClient();
     final race = {

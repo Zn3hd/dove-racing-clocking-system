@@ -4,6 +4,7 @@ import 'api.dart';
 import 'session.dart';
 import 'preview_client.dart';
 import 'preview_participant_edit.dart';
+import 'preview_pigeon_edit.dart';
 
 import 'management_form.dart';
 
@@ -333,10 +334,20 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
     if (saved == true && mounted) setState(refresh);
   }
 
+  Future<void> editPigeon(Map<String, dynamic> pigeon) async {
+    if (!isWebPreview) return;
+    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => PreviewPigeonEditPage(
+        api: widget.api, token: widget.token, pigeon: pigeon,
+      ),
+    ));
+    if (saved == true && mounted) setState(refresh);
+  }
+
   Widget section(String heading, List<Map<String, dynamic>> items,
       String Function(Map<String, dynamic>) title,
       String Function(Map<String, dynamic>) subtitle,
-      {bool editableParticipants = false}) {
+      {bool editableParticipants = false, bool editablePigeons = false}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const SizedBox(height: 24),
       Text('$heading (${items.length})',
@@ -347,10 +358,12 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
         ...items.map((item) => ListTile(
           title: Text(title(item)),
           subtitle: Text(subtitle(item)),
-          trailing: editableParticipants && isWebPreview
+          trailing: (editableParticipants || editablePigeons) && isWebPreview
               ? const Icon(Icons.edit_outlined) : null,
-          onTap: editableParticipants && isWebPreview
-              ? () => editParticipant(item) : null,
+          onTap: isWebPreview && editableParticipants
+              ? () => editParticipant(item)
+              : isWebPreview && editablePigeons
+                  ? () => editPigeon(item) : null,
         )),
     ]);
   }
@@ -393,7 +406,8 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
             action('Register pigeon', Icons.add_circle_outline, ManagementKind.pigeon),
             section('Pigeons', pigeons,
               (item) => item['official_ring_number']?.toString() ?? 'Unknown ring',
-              (item) => item['name']?.toString() ?? ''),
+              (item) => item['name']?.toString() ?? '',
+              editablePigeons: true),
             action('Create draft race', Icons.flag_outlined, ManagementKind.race),
             section('Races', races,
               (item) => item['name']?.toString() ?? 'Unnamed race',
