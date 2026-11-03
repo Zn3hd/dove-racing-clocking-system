@@ -94,6 +94,11 @@ http.Client previewClient() {
           !['separate', 'combined'].contains(body['guest_ranking_mode'])) {
         return bad('Check the draft race settings');
       }
+      if (races.any((race) => race['id'] != id &&
+          race['club_id'] == demoClubId &&
+          race['name'].toString().toLowerCase() == name.toLowerCase())) {
+        return bad('A demo race with this name already exists', 409);
+      }
       races[index] = {...races[index], ...body};
       return response(races[index]);
     }
@@ -219,6 +224,10 @@ http.Client previewClient() {
         !['m/min', 'm/s', 'km/h'].contains(body['display_speed_unit']) ||
         !['separate', 'combined'].contains(body['guest_ranking_mode'])) {
       return bad('Check the draft race settings');
+    }
+    if (races.any((race) => race['club_id'] == demoClubId &&
+        race['name'].toString().toLowerCase() == name.toLowerCase())) {
+      return bad('A demo race with this name already exists', 409);
     }
     final record = <String, dynamic>{
       'id': 'demo-race-${++sequence}', 'club_id': demoClubId,
