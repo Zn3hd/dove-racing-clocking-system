@@ -64,6 +64,47 @@ void main() {
     client.close();
   });
 
+  test('participant edit updates only demo record and rejects duplicate email', () async {
+    final client = previewClient();
+    final endpoint = base.resolve('/participants/demo-member');
+    final updated = await client.patch(endpoint, body: jsonEncode({
+      'full_name': 'Edited Demo', 'email': 'edited@example.invalid',
+      'role': 'guest',
+    }));
+    expect(updated.statusCode, 200);
+    expect(jsonDecode(updated.body)['role_code'], 'guest');
+    final list = await client.get(base.resolve('/participants?club_id=$demoClubId'));
+    expect((jsonDecode(list.body) as List).single['full_name'], 'Edited Demo');
+    expect((await client.patch(base.resolve('/participants/unknown'),
+      body: jsonEncode({'full_name': 'Test', 'email': 'x@y.test', 'role': 'member'}))).statusCode, 404);
+    expect((await client.patch(endpoint, body: jsonEncode({
+      'full_name': 'Test', 'email': 'x@y.test', 'role': 'admin',
+    }))).statusCode, 400);
+    expect((await client.patch(endpoint, body: jsonEncode({
+      'full_name': 'Test', 'email': 'x@y.test', 'role': 'member',
+      'club_id': 'another-club',
+    }))).statusCode, 400);
+    client.close();
+  });
+
+  test('participant edits reject duplicate email and reset in a new client', () async {
+    final client = previewClient();
+    await client.post(base.resolve('/participants'), body: jsonEncode({
+      'club_id': demoClubId, 'full_name': 'Other',
+      'email': 'other@example.invalid', 'password': 'password-12345',
+      'role': 'member',
+    }));
+    final conflict = await client.patch(base.resolve('/participants/demo-member'),
+      body: jsonEncode({'full_name': 'Changed',
+        'email': 'other@example.invalid', 'role': 'member'}));
+    expect(conflict.statusCode, 409);
+    final fresh = previewClient();
+    final list = await fresh.get(base.resolve('/participants?club_id=$demoClubId'));
+    expect((jsonDecode(list.body) as List).single['full_name'], 'Sample Member');
+    client.close();
+    fresh.close();
+  });
+
   test('sandbox never reaches network or accepts unknown writes', () async {
     final client = previewClient();
     expect((await client.post(base.resolve('/clocking'), body: '{}')).statusCode, 403);
