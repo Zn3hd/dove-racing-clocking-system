@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'api.dart';
 import 'session.dart';
+import 'preview_client.dart';
+
+const isWebPreview = bool.fromEnvironment('WEB_PREVIEW', defaultValue: false);
 import 'management_form.dart';
 
 void main() => runApp(const DoveApp());
@@ -13,7 +16,7 @@ class DoveApp extends StatefulWidget {
 }
 
 class _DoveAppState extends State<DoveApp> {
-  final api = RacingApi(http.Client());
+  final api = RacingApi(isWebPreview ? previewClient() : http.Client());
   late final session = Session(api);
   bool loading = true;
   String? accessToken;
@@ -21,7 +24,12 @@ class _DoveAppState extends State<DoveApp> {
   @override
   void initState() {
     super.initState();
-    _restore();
+    if (isWebPreview) {
+      accessToken = 'demo-preview-token';
+      loading = false;
+    } else {
+      _restore();
+    }
   }
 
   Future<void> _restore() async {
@@ -234,6 +242,11 @@ class _HomePageState extends State<HomePage> {
         return RefreshIndicator(
           onRefresh: () async { setState(refresh); await data; },
           child: ListView(padding: const EdgeInsets.all(20), children: [
+            if (isWebPreview) const Card(child: ListTile(
+              leading: Icon(Icons.visibility_outlined),
+              title: Text('Web preview — demonstration mode'),
+              subtitle: Text('No login or live API connection required.'),
+            )),
             Text('Welcome, ${me['full_name'] ?? 'Member'}',
               style: Theme.of(context).textTheme.headlineSmall),
             Text('Account role: ${me['role'] ?? 'unknown'}'),
@@ -326,6 +339,7 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
   }
 
   Widget action(String label, IconData icon, ManagementKind kind) =>
+      isWebPreview ? const SizedBox.shrink() :
       Align(alignment: Alignment.centerLeft, child: OutlinedButton.icon(
         onPressed: () => openCreate(kind), icon: Icon(icon), label: Text(label)));
 
@@ -350,6 +364,11 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
           onRefresh: () async { setState(refresh); await data; },
           child: ListView(padding: const EdgeInsets.all(20), children: [
             Text(widget.club['description']?.toString() ?? 'Club overview'),
+            if (isWebPreview) const Card(child: ListTile(
+              leading: Icon(Icons.visibility_outlined),
+              title: Text('Browser preview — demo data'),
+              subtitle: Text('Read-only. No production database access.'),
+            )),
             action('Register participant', Icons.person_add, ManagementKind.participant),
             section('Participants', participants,
               (item) => item['full_name']?.toString() ?? 'Unnamed participant',
