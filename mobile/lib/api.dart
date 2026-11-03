@@ -76,6 +76,12 @@ class RacingApi {
   Future<Map<String, dynamic>> createParticipant(String token, Map<String, dynamic> body) async =>
       Map<String, dynamic>.from(await request('/participants', method: 'POST', token: token, body: body));
 
+  Future<Map<String, dynamic>> updatePreviewParticipant(
+      String token, String id, Map<String, dynamic> body) async =>
+      Map<String, dynamic>.from(await request(
+        '/participants/${Uri.encodeComponent(id)}',
+        method: 'PATCH', token: token, body: body));
+
   Future<Map<String, dynamic>> createPigeon(String token, Map<String, dynamic> body) async =>
       Map<String, dynamic>.from(await request('/pigeons', method: 'POST', token: token, body: body));
 
