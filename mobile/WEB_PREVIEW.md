@@ -34,3 +34,5 @@ Do not use `WEB_PREVIEW=true` for production Android builds. The web preview is 
 2. Review Cloudflare Pages browser preview (once configured).
 3. Merge only after review.
 4. Install Android debug APK for final on-device authentication and hardware testing.
+
+Once GitHub secrets and variables are configured, push a new commit to the PR branch to re-evaluate the Cloudflare deployment condition. A successful web build alone does not mean the deployment step ran.
