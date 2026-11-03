@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'api.dart';
 import 'session.dart';
 import 'preview_client.dart';
+import 'preview_participant_edit.dart';
 
 import 'management_form.dart';
 
@@ -322,9 +323,20 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
     if (created == true && mounted) setState(refresh);
   }
 
+  Future<void> editParticipant(Map<String, dynamic> participant) async {
+    if (!isWebPreview) return;
+    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => PreviewParticipantEditPage(
+        api: widget.api, token: widget.token, participant: participant,
+      ),
+    ));
+    if (saved == true && mounted) setState(refresh);
+  }
+
   Widget section(String heading, List<Map<String, dynamic>> items,
       String Function(Map<String, dynamic>) title,
-      String Function(Map<String, dynamic>) subtitle) {
+      String Function(Map<String, dynamic>) subtitle,
+      {bool editableParticipants = false}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const SizedBox(height: 24),
       Text('$heading (${items.length})',
@@ -335,6 +347,10 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
         ...items.map((item) => ListTile(
           title: Text(title(item)),
           subtitle: Text(subtitle(item)),
+          trailing: editableParticipants && isWebPreview
+              ? const Icon(Icons.edit_outlined) : null,
+          onTap: editableParticipants && isWebPreview
+              ? () => editParticipant(item) : null,
         )),
     ]);
   }
@@ -372,7 +388,8 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
             action('Register participant', Icons.person_add, ManagementKind.participant),
             section('Participants', participants,
               (item) => item['full_name']?.toString() ?? 'Unnamed participant',
-              (item) => item['role_code']?.toString() ?? ''),
+              (item) => item['role_code']?.toString() ?? '',
+              editableParticipants: true),
             action('Register pigeon', Icons.add_circle_outline, ManagementKind.pigeon),
             section('Pigeons', pigeons,
               (item) => item['official_ring_number']?.toString() ?? 'Unknown ring',
