@@ -224,7 +224,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Dove Racing'),
-      actions: [IconButton(tooltip: 'Sign out', icon: const Icon(Icons.logout),
+      actions: [if (!isWebPreview) IconButton(tooltip: 'Sign out', icon: const Icon(Icons.logout),
         onPressed: widget.onLogout)]),
     body: FutureBuilder<(Map<String, dynamic>, List<Map<String, dynamic>>)>(
       future: data,
