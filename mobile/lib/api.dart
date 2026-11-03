@@ -50,7 +50,7 @@ class RacingApi {
       throw ApiException(
         response.statusCode == 401
             ? 'Your session has expired or your credentials are invalid.'
-            : detail is String ? detail : 'Request failed (' + response.statusCode.toString() + ').',
+            : detail is String ? detail : 'Request failed (${response.statusCode}).',
         response.statusCode,
       );
     }
