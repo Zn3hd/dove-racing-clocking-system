@@ -70,6 +70,18 @@ class RacingApi {
   Future<List<Map<String, dynamic>>> pigeons(String token, String clubId) =>
       _list('/pigeons?club_id=$clubId', token);
 
+  Future<List<Map<String, dynamic>>> lofts(String token, String clubId) =>
+      _list('/lofts?club_id=$clubId', token);
+
+  Future<Map<String, dynamic>> createParticipant(String token, Map<String, dynamic> body) async =>
+      Map<String, dynamic>.from(await request('/participants', method: 'POST', token: token, body: body));
+
+  Future<Map<String, dynamic>> createPigeon(String token, Map<String, dynamic> body) async =>
+      Map<String, dynamic>.from(await request('/pigeons', method: 'POST', token: token, body: body));
+
+  Future<Map<String, dynamic>> createRace(String token, Map<String, dynamic> body) async =>
+      Map<String, dynamic>.from(await request('/races', method: 'POST', token: token, body: body));
+
   Future<List<Map<String, dynamic>>> races(String token) =>
       _list('/races', token);
 

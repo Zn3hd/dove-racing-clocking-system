@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'api.dart';
 import 'session.dart';
+import 'management_form.dart';
 
 void main() => runApp(const DoveApp());
 
@@ -297,6 +298,16 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
     }();
   }
 
+  Future<void> openCreate(ManagementKind kind) async {
+    final created = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => ManagementForm(
+        api: widget.api, token: widget.token,
+        clubId: widget.club['id'].toString(), kind: kind,
+      ),
+    ));
+    if (created == true && mounted) setState(refresh);
+  }
+
   Widget section(String heading, List<Map<String, dynamic>> items,
       String Function(Map<String, dynamic>) title,
       String Function(Map<String, dynamic>) subtitle) {
@@ -313,6 +324,10 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
         )),
     ]);
   }
+
+  Widget action(String label, IconData icon, ManagementKind kind) =>
+      Align(alignment: Alignment.centerLeft, child: OutlinedButton.icon(
+        onPressed: () => openCreate(kind), icon: Icon(icon), label: Text(label)));
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -335,12 +350,15 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
           onRefresh: () async { setState(refresh); await data; },
           child: ListView(padding: const EdgeInsets.all(20), children: [
             Text(widget.club['description']?.toString() ?? 'Club overview'),
+            action('Register participant', Icons.person_add, ManagementKind.participant),
             section('Participants', participants,
               (item) => item['full_name']?.toString() ?? 'Unnamed participant',
               (item) => item['role_code']?.toString() ?? ''),
+            action('Register pigeon', Icons.add_circle_outline, ManagementKind.pigeon),
             section('Pigeons', pigeons,
               (item) => item['official_ring_number']?.toString() ?? 'Unknown ring',
               (item) => item['name']?.toString() ?? ''),
+            action('Create draft race', Icons.flag_outlined, ManagementKind.race),
             section('Races', races,
               (item) => item['name']?.toString() ?? 'Unnamed race',
               (item) => item['status']?.toString() ?? ''),
