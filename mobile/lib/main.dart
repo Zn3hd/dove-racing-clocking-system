@@ -24,7 +24,12 @@ class _DoveAppState extends State<DoveApp> {
   }
 
   Future<void> _restore() async {
-    final token = await session.token();
+    String? token;
+    try {
+      token = await session.token();
+    } catch (_) {
+      await session.logout();
+    }
     if (token != null) {
       try {
         await api.me(token);
@@ -47,13 +52,21 @@ class _DoveAppState extends State<DoveApp> {
     await session.login(email, password);
     final token = await session.token();
     if (token == null) throw ApiException('Could not save session.');
-    await api.me(token);
+    try {
+      await api.me(token);
+    } catch (_) {
+      await session.logout();
+      rethrow;
+    }
     if (mounted) setState(() => accessToken = token);
   }
 
   Future<void> _logout() async {
-    await session.logout();
-    if (mounted) setState(() => accessToken = null);
+    try {
+      await session.logout();
+    } finally {
+      if (mounted) setState(() => accessToken = null);
+    }
   }
 
   @override
@@ -178,7 +191,7 @@ class _HomePageState extends State<HomePage> {
             : <Map<String, dynamic>>[];
         return (me, clubs);
       } on ApiException catch (e) {
-        if (e.status == 401) {
+        if (e.status == 401 || e.status == 403) {
           await widget.onUnauthorized();
         }
         rethrow;
