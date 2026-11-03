@@ -1,0 +1,235 @@
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'api.dart';
+import 'session.dart';
+
+void main() => runApp(const DoveApp());
+
+class DoveApp extends StatefulWidget {
+  const DoveApp({super.key});
+  @override
+  State<DoveApp> createState() => _DoveAppState();
+}
+
+class _DoveAppState extends State<DoveApp> {
+  final api = RacingApi(http.Client());
+  late final session = Session(api);
+  bool loading = true;
+  String? accessToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _restore();
+  }
+
+  Future<void> _restore() async {
+    final token = await session.token();
+    if (token != null) {
+      try {
+        await api.me(token);
+        if (mounted) setState(() { accessToken = token; loading = false; });
+        return;
+      } on ApiException catch (e) {
+        if (e.status == 401 || e.status == 403) {
+          await session.logout();
+        } else {
+          // Do not discard a valid session for transient connectivity failures.
+          if (mounted) setState(() { accessToken = token; loading = false; });
+          return;
+        }
+      }
+    }
+    if (mounted) setState(() { accessToken = null; loading = false; });
+  }
+
+  Future<void> _login(String email, String password) async {
+    await session.login(email, password);
+    final token = await session.token();
+    if (token == null) throw ApiException('Could not save session.');
+    await api.me(token);
+    if (mounted) setState(() => accessToken = token);
+  }
+
+  Future<void> _logout() async {
+    await session.logout();
+    if (mounted) setState(() => accessToken = null);
+  }
+
+  @override
+  void dispose() {
+    api.client.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'Dove Racing',
+    debugShowCheckedModeBanner: false,
+    theme: ThemeData(colorSchemeSeed: const Color(0xff155e75), useMaterial3: true),
+    home: loading
+        ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+        : accessToken == null
+            ? LoginPage(onLogin: _login)
+            : HomePage(api: api, token: accessToken!, onLogout: _logout,
+                onUnauthorized: _logout),
+  );
+}
+
+class LoginPage extends StatefulWidget {
+  final Future<void> Function(String, String) onLogin;
+  const LoginPage({super.key, required this.onLogin});
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final form = GlobalKey<FormState>();
+  final email = TextEditingController();
+  final password = TextEditingController();
+  bool busy = false;
+  String? error;
+
+  @override
+  void dispose() {
+    email.dispose();
+    password.dispose();
+    super.dispose();
+  }
+
+  Future<void> submit() async {
+    if (!(form.currentState?.validate() ?? false) || busy) return;
+    setState(() { busy = true; error = null; });
+    try {
+      await widget.onLogin(email.text, password.text);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => error = 'Unable to sign in.');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Dove Racing')),
+    body: Center(child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 420),
+      child: SingleChildScrollView(padding: const EdgeInsets.all(24),
+        child: Form(key: form, child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Icon(Icons.flutter_dash, size: 68),
+            const SizedBox(height: 16),
+            Text('Club sign in', style: Theme.of(context).textTheme.headlineMedium),
+            const SizedBox(height: 8),
+            const Text('Use your existing Dove Racing administrator credentials.'),
+            const SizedBox(height: 24),
+            TextFormField(controller: email, keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.username], decoration: const InputDecoration(
+                labelText: 'Email', border: OutlineInputBorder()),
+              validator: (v) => v == null || !v.contains('@') ? 'Enter a valid email' : null),
+            const SizedBox(height: 12),
+            TextFormField(controller: password, obscureText: true,
+              autofillHints: const [AutofillHints.password],
+              decoration: const InputDecoration(labelText: 'Password',
+                border: OutlineInputBorder()),
+              validator: (v) => v == null || v.isEmpty ? 'Enter your password' : null),
+            if (error != null) Padding(padding: const EdgeInsets.only(top: 12),
+              child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+            const SizedBox(height: 20),
+            FilledButton(onPressed: busy ? null : submit,
+              child: Padding(padding: const EdgeInsets.all(12),
+                child: busy ? const CircularProgressIndicator() : const Text('Sign in'))),
+          ],
+        )),
+      ),
+    )),
+  );
+}
+
+class HomePage extends StatefulWidget {
+  final RacingApi api;
+  final String token;
+  final Future<void> Function() onLogout;
+  final Future<void> Function() onUnauthorized;
+  const HomePage({super.key, required this.api, required this.token,
+    required this.onLogout, required this.onUnauthorized});
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  late Future<(Map<String, dynamic>, List<Map<String, dynamic>>)> data;
+
+  @override
+  void initState() {
+    super.initState();
+    refresh();
+  }
+
+  void refresh() {
+    data = () async {
+      try {
+        final me = await widget.api.me(widget.token);
+        final clubs = me['role'] == 'admin'
+            ? await widget.api.clubs(widget.token)
+            : <Map<String, dynamic>>[];
+        return (me, clubs);
+      } on ApiException catch (e) {
+        if (e.status == 401) {
+          await widget.onUnauthorized();
+        }
+        rethrow;
+      }
+    }();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Dove Racing'),
+      actions: [IconButton(tooltip: 'Sign out', icon: const Icon(Icons.logout),
+        onPressed: widget.onLogout)]),
+    body: FutureBuilder<(Map<String, dynamic>, List<Map<String, dynamic>>)>(
+      future: data,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData && !snapshot.hasError) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Padding(padding: const EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text('Could not load account details.'),
+              const SizedBox(height: 8),
+              Text(snapshot.error.toString()),
+              TextButton(onPressed: () => setState(refresh), child: const Text('Retry')),
+            ])));
+        }
+        final (me, clubs) = snapshot.data!;
+        return RefreshIndicator(
+          onRefresh: () async { setState(refresh); await data; },
+          child: ListView(padding: const EdgeInsets.all(20), children: [
+            Text('Welcome, ${me['full_name'] ?? 'Member'}',
+              style: Theme.of(context).textTheme.headlineSmall),
+            Text('Account role: ${me['role'] ?? 'unknown'}'),
+            const SizedBox(height: 24),
+            Text('My clubs', style: Theme.of(context).textTheme.titleLarge),
+            if (me['role'] != 'admin')
+              const ListTile(title: Text('Club listing is currently admin-only.'))
+            else if (clubs.isEmpty)
+              const ListTile(title: Text('No clubs assigned to this administrator.'))
+            else
+              ...clubs.map((club) => Card(child: ListTile(
+                leading: const Icon(Icons.groups),
+                title: Text(club['name']?.toString() ?? 'Unnamed club'),
+                subtitle: Text(club['description']?.toString() ?? ''),
+              ))),
+            const SizedBox(height: 16),
+            const Text('Prototype only — official clocking is not enabled.'),
+          ]),
+        );
+      },
+    ),
+  );
+}
