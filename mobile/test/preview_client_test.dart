@@ -176,6 +176,24 @@ void main() {
     fresh.close();
   });
 
+  test('draft race names are unique within demo club', () async {
+    final client = previewClient();
+    final settings = {
+      'club_id': demoClubId, 'name': 'Demo Draft Race',
+      'release_latitude': 14.5, 'release_longitude': 121.0,
+      'minimum_speed_mpm': 500, 'maximum_speed_mpm': 3000,
+      'display_speed_unit': 'm/min', 'guest_ranking_mode': 'separate',
+    };
+    expect((await client.post(base.resolve('/races'),
+      body: jsonEncode(settings))).statusCode, 409);
+    final created = await client.post(base.resolve('/races'),
+      body: jsonEncode({...settings, 'name': 'Second Race'}));
+    expect(created.statusCode, 201);
+    expect((await client.patch(base.resolve('/races/demo-race'),
+      body: jsonEncode({...settings, 'name': 'second race'}))).statusCode, 409);
+    client.close();
+  });
+
   test('sandbox never reaches network or accepts unknown writes', () async {
     final client = previewClient();
     expect((await client.post(base.resolve('/clocking'), body: '{}')).statusCode, 403);
