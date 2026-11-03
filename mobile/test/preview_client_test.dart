@@ -190,7 +190,7 @@ void main() {
       body: jsonEncode({...settings, 'name': 'Second Race'}));
     expect(created.statusCode, 201);
     expect((await client.patch(base.resolve('/races/demo-race'),
-      body: jsonEncode({...settings, 'name': 'second race'}))).statusCode, 409);
+      body: jsonEncode({...settings, 'name': 'second race'}..remove('club_id')))).statusCode, 409);
     client.close();
   });
 
