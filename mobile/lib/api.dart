@@ -94,6 +94,9 @@ class RacingApi {
   Future<Map<String, dynamic>> createRace(String token, Map<String, dynamic> body) async =>
       Map<String, dynamic>.from(await request('/races', method: 'POST', token: token, body: body));
 
+  Future<Map<String, dynamic>> updatePreviewRace(String token, String id, Map<String, dynamic> body) async =>
+      Map<String, dynamic>.from(await request('/races/${Uri.encodeComponent(id)}', method: 'PATCH', token: token, body: body));
+
   Future<List<Map<String, dynamic>>> races(String token) =>
       _list('/races', token);
 
