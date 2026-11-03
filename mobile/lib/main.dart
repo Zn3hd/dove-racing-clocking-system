@@ -24,7 +24,12 @@ class _DoveAppState extends State<DoveApp> {
   }
 
   Future<void> _restore() async {
-    final token = await session.token();
+    String? token;
+    try {
+      token = await session.token();
+    } catch (_) {
+      await session.logout();
+    }
     if (token != null) {
       try {
         await api.me(token);
@@ -47,13 +52,21 @@ class _DoveAppState extends State<DoveApp> {
     await session.login(email, password);
     final token = await session.token();
     if (token == null) throw ApiException('Could not save session.');
-    await api.me(token);
+    try {
+      await api.me(token);
+    } catch (_) {
+      await session.logout();
+      rethrow;
+    }
     if (mounted) setState(() => accessToken = token);
   }
 
   Future<void> _logout() async {
-    await session.logout();
-    if (mounted) setState(() => accessToken = null);
+    try {
+      await session.logout();
+    } finally {
+      if (mounted) setState(() => accessToken = null);
+    }
   }
 
   @override
@@ -149,6 +162,8 @@ class _LoginPageState extends State<LoginPage> {
   );
 }
 
+bool canManageClub(String? role) => role == 'chairman' || role == 'president';
+
 class HomePage extends StatefulWidget {
   final RacingApi api;
   final String token;
@@ -169,21 +184,32 @@ class _HomePageState extends State<HomePage> {
     refresh();
   }
 
+  Future<T> guarded<T>(Future<T> Function() action) async {
+    try {
+      return await action();
+    } on ApiException catch (e) {
+      if (e.status == 401) await widget.onUnauthorized();
+      rethrow;
+    }
+  }
+
   void refresh() {
-    data = () async {
-      try {
-        final me = await widget.api.me(widget.token);
-        final clubs = me['role'] == 'admin'
-            ? await widget.api.clubs(widget.token)
-            : <Map<String, dynamic>>[];
-        return (me, clubs);
-      } on ApiException catch (e) {
-        if (e.status == 401) {
-          await widget.onUnauthorized();
-        }
-        rethrow;
-      }
-    }();
+    data = guarded(() async {
+      final me = await widget.api.me(widget.token);
+      final clubs = canManageClub(me['role'] as String?)
+          ? await widget.api.clubs(widget.token)
+          : <Map<String, dynamic>>[];
+      return (me, clubs);
+    });
+  }
+
+  void openClub(Map<String, dynamic> club) {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => ClubDetailsPage(
+        api: widget.api, token: widget.token, club: club,
+        onUnauthorized: widget.onUnauthorized,
+      ),
+    ));
   }
 
   @override
@@ -198,13 +224,10 @@ class _HomePageState extends State<HomePage> {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
-          return Center(child: Padding(padding: const EdgeInsets.all(24),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Text('Could not load account details.'),
-              const SizedBox(height: 8),
-              Text(snapshot.error.toString()),
-              TextButton(onPressed: () => setState(refresh), child: const Text('Retry')),
-            ])));
+          return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('Could not load account details.'),
+            TextButton(onPressed: () => setState(refresh), child: const Text('Retry')),
+          ]));
         }
         final (me, clubs) = snapshot.data!;
         return RefreshIndicator(
@@ -215,8 +238,8 @@ class _HomePageState extends State<HomePage> {
             Text('Account role: ${me['role'] ?? 'unknown'}'),
             const SizedBox(height: 24),
             Text('My clubs', style: Theme.of(context).textTheme.titleLarge),
-            if (me['role'] != 'admin')
-              const ListTile(title: Text('Club listing is currently admin-only.'))
+            if (!canManageClub(me['role'] as String?))
+              const ListTile(title: Text('Club management requires chairman or president access.'))
             else if (clubs.isEmpty)
               const ListTile(title: Text('No clubs assigned to this administrator.'))
             else
@@ -224,9 +247,105 @@ class _HomePageState extends State<HomePage> {
                 leading: const Icon(Icons.groups),
                 title: Text(club['name']?.toString() ?? 'Unnamed club'),
                 subtitle: Text(club['description']?.toString() ?? ''),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => openClub(club),
               ))),
             const SizedBox(height: 16),
             const Text('Prototype only — official clocking is not enabled.'),
+          ]),
+        );
+      },
+    ),
+  );
+}
+
+class ClubDetailsPage extends StatefulWidget {
+  final RacingApi api;
+  final String token;
+  final Map<String, dynamic> club;
+  final Future<void> Function() onUnauthorized;
+  const ClubDetailsPage({super.key, required this.api, required this.token,
+    required this.club, required this.onUnauthorized});
+
+  @override
+  State<ClubDetailsPage> createState() => _ClubDetailsPageState();
+}
+
+class _ClubDetailsPageState extends State<ClubDetailsPage> {
+  late Future<(List<Map<String, dynamic>>, List<Map<String, dynamic>>,
+      List<Map<String, dynamic>>)> data;
+
+  @override
+  void initState() {
+    super.initState();
+    refresh();
+  }
+
+  void refresh() {
+    data = () async {
+      try {
+        final clubId = widget.club['id'].toString();
+        final participants = await widget.api.participants(widget.token, clubId);
+        final pigeons = await widget.api.pigeons(widget.token, clubId);
+        final allRaces = await widget.api.races(widget.token);
+        final races = allRaces.where((race) => race['club_id']?.toString() == clubId).toList();
+        return (participants, pigeons, races);
+      } on ApiException catch (e) {
+        if (e.status == 401) await widget.onUnauthorized();
+        rethrow;
+      }
+    }();
+  }
+
+  Widget section(String heading, List<Map<String, dynamic>> items,
+      String Function(Map<String, dynamic>) title,
+      String Function(Map<String, dynamic>) subtitle) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const SizedBox(height: 24),
+      Text('$heading (${items.length})',
+        style: Theme.of(context).textTheme.titleLarge),
+      if (items.isEmpty)
+        const ListTile(title: Text('No records yet.'))
+      else
+        ...items.map((item) => ListTile(
+          title: Text(title(item)),
+          subtitle: Text(subtitle(item)),
+        )),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: Text(widget.club['name']?.toString() ?? 'Club')),
+    body: FutureBuilder<(List<Map<String, dynamic>>, List<Map<String, dynamic>>,
+        List<Map<String, dynamic>>)>(
+      future: data,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData && !snapshot.hasError) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('Could not load club records.'),
+            TextButton(onPressed: () => setState(refresh), child: const Text('Retry')),
+          ]));
+        }
+        final (participants, pigeons, races) = snapshot.data!;
+        return RefreshIndicator(
+          onRefresh: () async { setState(refresh); await data; },
+          child: ListView(padding: const EdgeInsets.all(20), children: [
+            Text(widget.club['description']?.toString() ?? 'Club overview'),
+            section('Participants', participants,
+              (item) => item['full_name']?.toString() ?? 'Unnamed participant',
+              (item) => item['role_code']?.toString() ?? ''),
+            section('Pigeons', pigeons,
+              (item) => item['official_ring_number']?.toString() ?? 'Unknown ring',
+              (item) => item['name']?.toString() ?? ''),
+            section('Races', races,
+              (item) => item['name']?.toString() ?? 'Unnamed race',
+              (item) => item['status']?.toString() ?? ''),
+            const SizedBox(height: 24),
+            const Text('Read-only preview — official clocking is not enabled.'),
           ]),
         );
       },

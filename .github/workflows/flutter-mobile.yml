@@ -1,0 +1,45 @@
+name: Flutter mobile checks
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/flutter-mobile.yml'
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/flutter-mobile.yml'
+  workflow_dispatch:
+
+jobs:
+  analyze-test-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Android project
+        run: flutter create --project-name dove_racing_mobile --platforms android .
+      - name: Remove generated Flutter template test
+        run: rm -f test/widget_test.dart
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Static analysis
+        run: flutter analyze
+      - name: Unit tests
+        run: flutter test
+      - name: Verify Android debug build
+        run: flutter build apk --debug
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dove-racing-android-debug
+          path: mobile/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error

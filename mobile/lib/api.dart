@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-const apiBaseUrl = 'https://dove-racing-clocking-system.onrender.com';
+const apiBaseUrl = String.fromEnvironment('API_BASE_URL',
+    defaultValue: 'https://dove-racing-clocking-system.onrender.com');
 
 class ApiException implements Exception {
   final String message;
@@ -17,7 +18,12 @@ class RacingApi {
 
   Future<dynamic> request(String path,
       {String method = 'GET', String? token, Object? body}) async {
-    final uri = Uri.parse('$apiBaseUrl$path');
+    final base = Uri.parse(apiBaseUrl);
+    if (base.scheme != 'https' && base.host != 'localhost' &&
+        base.host != '127.0.0.1') {
+      throw ApiException('API endpoint must use HTTPS.');
+    }
+    final uri = base.resolve(path);
     http.Response response;
     try {
       response = await client
@@ -44,7 +50,7 @@ class RacingApi {
       throw ApiException(
         response.statusCode == 401
             ? 'Your session has expired or your credentials are invalid.'
-            : detail is String ? detail : 'Request failed (' + response.statusCode.toString() + ').',
+            : detail is String ? detail : 'Request failed (${response.statusCode}).',
         response.statusCode,
       );
     }
@@ -57,6 +63,19 @@ class RacingApi {
 
   Future<Map<String, dynamic>> me(String token) async =>
       Map<String, dynamic>.from(await request('/auth/me', token: token));
+
+  Future<List<Map<String, dynamic>>> participants(String token, String clubId) =>
+      _list('/participants?club_id=$clubId', token);
+
+  Future<List<Map<String, dynamic>>> pigeons(String token, String clubId) =>
+      _list('/pigeons?club_id=$clubId', token);
+
+  Future<List<Map<String, dynamic>>> races(String token) =>
+      _list('/races', token);
+
+  Future<List<Map<String, dynamic>>> _list(String path, String token) async =>
+      (await request(path, token: token) as List)
+          .map((item) => Map<String, dynamic>.from(item as Map)).toList();
 
   Future<List<Map<String, dynamic>>> clubs(String token) async =>
       (await request('/clubs', token: token) as List)
