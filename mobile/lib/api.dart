@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-const apiBaseUrl = 'https://dove-racing-clocking-system.onrender.com';
+const apiBaseUrl = String.fromEnvironment('API_BASE_URL',
+    defaultValue: 'https://dove-racing-clocking-system.onrender.com');
 
 class ApiException implements Exception {
   final String message;
@@ -17,7 +18,12 @@ class RacingApi {
 
   Future<dynamic> request(String path,
       {String method = 'GET', String? token, Object? body}) async {
-    final uri = Uri.parse('$apiBaseUrl$path');
+    final base = Uri.parse(apiBaseUrl);
+    if (base.scheme != 'https' && base.host != 'localhost' &&
+        base.host != '127.0.0.1') {
+      throw ApiException('API endpoint must use HTTPS.');
+    }
+    final uri = base.resolve(path);
     http.Response response;
     try {
       response = await client
