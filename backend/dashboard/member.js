@@ -69,13 +69,13 @@ function draw(data) {
     ["Ring", p.official_ring_number], ["Loft", p.loft_name],
     ["RFID", p.has_active_rfid ? "Registered" : "Not registered"], ["Status", p.status]
   ]));
-  const races = data.race_entries.map(e => item(e.race_name, [
+  const entryCards = data.race_entries.map(e => item(e.race_name, [
     ["Ring", e.official_ring_number], ["Race", e.race_status],
     ["Clocking", e.first_unrejected_scan_at ? "Scan detected (provisional)" : "No scan recorded"],
     ["Detected at", e.first_unrejected_scan_at ? new Date(e.first_unrejected_scan_at).toLocaleString() : "—"]
   ]));
   $("pigeons").replaceChildren(...(birds.length ? birds : [element("p","No pigeons registered yet.","muted")]));
-  $("entries").replaceChildren(...(races.length ? races : [element("p","No race entries yet.","muted")]));
+  $("entries").replaceChildren(...(entryCards.length ? entryCards : [element("p","No race entries yet.","muted")]));
 }
 async function refresh() {
   if (!token || busy) return;
