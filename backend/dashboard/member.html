@@ -8,7 +8,21 @@
 <label>Email <input name="email" type="email" autocomplete="username" required></label>
 <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
 <button type="submit">Sign in</button></form><p id="login-error" class="error" role="alert"></p>
-<p class="muted">Club administrators create member accounts. Administrator tools are not available here.</p></section>
+<p class="muted">Not a member yet? <button id="show-apply" type="button">Apply for membership</button> or <button id="show-status" type="button">Check application status</button>.</p></section>
+<section id="apply-panel" class="panel" hidden><h2>Apply for membership</h2>
+<p class="muted">An administrator must approve your application before you can sign in.</p>
+<form id="apply-form"><label>Racing club <select name="club_id" required></select></label>
+<label>Full name <input name="full_name" required maxlength="200"></label>
+<label>Email <input name="email" type="email" required maxlength="250"></label>
+<label>Phone (optional) <input name="phone" type="tel" maxlength="100"></label>
+<label>Password <input name="password" type="password" autocomplete="new-password" minlength="12" required></label>
+<button type="submit">Submit application</button><button type="button" class="back-login">Back to sign in</button></form>
+<p id="apply-message" role="status"></p></section>
+<section id="status-panel" class="panel" hidden><h2>Check application status</h2>
+<form id="status-form"><label>Email <input name="email" type="email" required></label>
+<label>Application password <input name="password" type="password" required></label>
+<button type="submit">Check status</button><button type="button" class="back-login">Back to sign in</button></form>
+<p id="status-message" role="status"></p></section>
 <div id="workspace" hidden>
 <div class="toolbar"><p id="welcome"></p><span id="sync-status" role="status">Connecting…</span><button id="refresh" type="button">Refresh</button></div>
 <div class="stats"><article class="panel"><span>My pigeons</span><strong id="pigeon-count">0</strong></article><article class="panel"><span>Active race entries</span><strong id="active-count">0</strong></article><article class="panel"><span>Scans detected</span><strong id="scan-count">0</strong></article></div>
