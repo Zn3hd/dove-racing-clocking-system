@@ -116,3 +116,20 @@ def test_gateway_rejects_naive_reader_timestamp_and_invalid_adapter():
             pass
         else:
             raise AssertionError("Gateway accepted invalid evidence")
+
+
+def test_gateway_replay_fingerprint_is_stable_and_tamper_sensitive():
+    from uuid import uuid4
+    from app.routers.device_gateway import GatewayArrival, arrival_fingerprint, digest
+    import json
+    base = {"race_id": uuid4(), "message_id": uuid4(), "ring_uid": "R-001"}
+    first = GatewayArrival(**base)
+    # The original gateway envelope format remains compatible.
+    legacy = digest(json.dumps(first.model_dump(mode="json"), sort_keys=True))
+    assert arrival_fingerprint(first) == legacy
+    assert arrival_fingerprint(GatewayArrival(**base)) == legacy
+    assert arrival_fingerprint(GatewayArrival(**base, ring_uid="R-002")) != legacy
+    assert arrival_fingerprint(GatewayArrival(**base, offline_buffered=True)) != legacy
+    assert arrival_fingerprint(GatewayArrival(**base, adapter_type="simulator",
+        capture_mode="simulated")) != legacy
+    assert arrival_fingerprint(GatewayArrival(**base, original_scan="scan")) != legacy
