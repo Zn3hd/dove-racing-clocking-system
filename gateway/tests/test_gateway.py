@@ -206,3 +206,64 @@ def test_rate_limit_pauses_entire_reader_scope(tmp_path):
         assert len(queue.due(cfg,100000000060)) == 2
     finally:
         queue.close()
+
+
+@pytest.mark.parametrize("frame,error", [
+    (b"A" * 1024 + b"\n", "Oversized serial frame"),
+    (b"A" * 1025 + b"\n", "Oversized serial frame"),
+    (b"RING-\xff\n", "ascii"),
+])
+def test_serial_reader_rejects_oversized_and_nonascii_frames(monkeypatch, frame, error):
+    import sys
+    from types import SimpleNamespace
+    chunks = iter(bytes([byte]) for byte in frame)
+    closed = []
+    class Port:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            closed.append(True)
+        def read(self, count):
+            assert count == 1
+            return next(chunks)
+    monkeypatch.setitem(sys.modules, "serial", SimpleNamespace(Serial=lambda *a, **kw: Port()))
+    with pytest.raises((ValueError, UnicodeDecodeError), match=error):
+        list(SerialLines("test-port", 9600).readings())
+    assert closed == [True]
+
+
+def test_serial_reader_accepts_maximum_complete_frame_and_closes(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    frame = b"A" * 1023 + b"\n"
+    chunks = iter(bytes([byte]) for byte in frame)
+    closed = []
+    class Port:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            closed.append(True)
+        def read(self, count):
+            return next(chunks)
+    monkeypatch.setitem(sys.modules, "serial", SimpleNamespace(Serial=lambda *a, **kw: Port()))
+    stream = SerialLines("test-port", 9600).readings()
+    assert next(stream).tag == frame.decode("ascii")
+    stream.close()
+    assert closed == [True]
+
+
+def test_serial_disconnect_propagates_and_closes(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    closed = []
+    class Port:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            closed.append(True)
+        def read(self, count):
+            raise OSError("Reader disconnected")
+    monkeypatch.setitem(sys.modules, "serial", SimpleNamespace(Serial=lambda *a, **kw: Port()))
+    with pytest.raises(OSError, match="Reader disconnected"):
+        next(SerialLines("test-port", 9600).readings())
+    assert closed == [True]
