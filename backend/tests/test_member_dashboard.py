@@ -19,7 +19,7 @@ def test_member_overview_requires_member_role_and_scopes_private_data(scenario):
     race = make_race(s)
     member_entry = register(s, race, s["pigeon_member"], "RFID")
     guest_entry = register(s, race, s["pigeon_guest"], "QR")
-    response = c.get(endpoint, headers=s["headers"](s["member"]])
+    response = c.get(endpoint, headers=s["headers"](s["member"]))
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["official"] is False
