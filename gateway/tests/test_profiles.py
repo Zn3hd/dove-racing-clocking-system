@@ -76,3 +76,33 @@ def test_network_lines_closes_resources(monkeypatch, complete):
 def test_invalid_configuration_fails_before_capture(tmp_path, overrides):
     with pytest.raises(ValueError):
         config(tmp_path, **overrides)
+
+
+@pytest.mark.parametrize("payload", [
+    "A" * 1024 + "\n",
+    "A" * 1025 + "\n",
+    "A" * 1025,
+])
+def test_network_reader_rejects_oversized_frames(monkeypatch, payload):
+    import socket
+    connection = MagicMock()
+    connection.__enter__.return_value = connection
+    stream = io.StringIO(payload)
+    connection.makefile.return_value = stream
+    monkeypatch.setattr(socket, "create_connection", lambda *args, **kwargs: connection)
+    with pytest.raises(ValueError, match="Oversized network frame"):
+        list(NetworkLines("reader.local", 9000).readings())
+    assert stream.closed
+
+
+def test_network_reader_accepts_maximum_complete_frame(monkeypatch):
+    import socket
+    connection = MagicMock()
+    connection.__enter__.return_value = connection
+    stream = io.StringIO("A" * 1023 + "\n")
+    connection.makefile.return_value = stream
+    monkeypatch.setattr(socket, "create_connection", lambda *args, **kwargs: connection)
+    readings = list(NetworkLines("reader.local", 9000).readings())
+    assert len(readings) == 1
+    assert readings[0].tag == "A" * 1023 + "\n"
+    assert stream.closed
