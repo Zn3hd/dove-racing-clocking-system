@@ -129,7 +129,7 @@ def test_gateway_replay_fingerprint_is_stable_and_tamper_sensitive():
         "adapter_type", "protocol", "capture_mode", "original_scan"}), sort_keys=True))
     assert arrival_fingerprint(first) == legacy
     assert arrival_fingerprint(GatewayArrival(**base)) == legacy
-    assert arrival_fingerprint(GatewayArrival(**base, ring_uid="R-002")) != legacy
+    assert arrival_fingerprint(GatewayArrival(**{**base, "ring_uid": "R-002"})) != legacy
     assert arrival_fingerprint(GatewayArrival(**base, offline_buffered=True)) != legacy
     assert arrival_fingerprint(GatewayArrival(**base, adapter_type="simulator",
         capture_mode="simulated")) != legacy
