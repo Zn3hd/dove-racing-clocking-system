@@ -93,7 +93,9 @@ class NetworkLines(Adapter):
         import socket
         with socket.create_connection((self.host, self.port), timeout=self.timeout) as connection:
             with connection.makefile("r", encoding="ascii", errors="strict", newline="") as stream:
-                for reading in KeyboardLines(stream).readings():
-                    if not reading.tag.endswith("\n"):
+                while line := stream.readline(1025):
+                    if len(line) > 1024:
+                        raise ValueError("Oversized network frame; expected newline-terminated ASCII tags")
+                    if not line.endswith("\n"):
                         raise ValueError("Incomplete network frame")
-                    yield reading
+                    yield Reading(line, datetime.now(timezone.utc))
