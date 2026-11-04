@@ -54,6 +54,13 @@ class RFIDSimulatorRequest(BaseModel):
     device_id: UUID
     rfid_uid: str = Field(min_length=1, max_length=200)
     idempotency_key: UUID
+    @field_validator('rfid_uid')
+    @classmethod
+    def nonblank_rfid_uid(cls, value):
+        if not value.strip():
+            raise ValueError('RFID UID must not be blank')
+        return value.strip()
+
     # Device clocks cannot be trusted until hardware protocol and clock attestation exist.
     # This endpoint uses the server time, not a user-supplied timestamp.
 
