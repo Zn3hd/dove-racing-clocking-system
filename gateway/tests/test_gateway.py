@@ -267,3 +267,29 @@ def test_serial_disconnect_propagates_and_closes(monkeypatch):
     with pytest.raises(OSError, match="Reader disconnected"):
         next(SerialLines("test-port", 9600).readings())
     assert closed == [True]
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_authorization_failure_pauses_device_queue_without_losing_scans(tmp_path, status):
+    cfg = config(tmp_path)
+    queue = Queue(cfg.queue_path)
+    try:
+        first = queue.enqueue(cfg, Reading("0001", datetime.now(timezone.utc)))
+        second = queue.enqueue(cfg, Reading("0002", datetime.now(timezone.utc)))
+        calls = []
+        def denied(request):
+            calls.append(request)
+            return httpx.Response(status)
+        now = 100000000000
+        with httpx.Client(transport=httpx.MockTransport(denied)) as client:
+            assert synchronize(queue, cfg, "test-token", client, now)["auth_blocked"] is True
+            assert synchronize(queue, cfg, "test-token", client, now + 60)["auth_blocked"] is False
+        assert len(calls) == 1
+        assert queue.counts() == {"pending": 2}
+        assert queue.due(cfg, now + 299) == []
+        queue.close()
+        queue = Queue(cfg.queue_path)
+        assert {row["id"] for row in queue.due(cfg, now + 300)} == {first, second}
+        assert all(row["payload"] for row in queue.due(cfg, now + 300))
+    finally:
+        queue.close()
