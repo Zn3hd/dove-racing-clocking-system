@@ -40,3 +40,31 @@ def test_event_review_requires_admin():
         json={"decision":"reject","reason":"Invalid clocking evidence"},
     )
     assert response.status_code == 401
+
+def test_gateway_rejects_blank_ring_uid_before_database_access():
+    from pydantic import ValidationError
+    from app.routers.device_gateway import GatewayArrival
+    from uuid import uuid4
+    base = {"message_id": uuid4(), "race_id": uuid4()}
+    for uid in ["", "   ", "\\t"]:
+        try:
+            GatewayArrival(**base, ring_uid=uid)
+        except ValidationError:
+            pass
+        else:
+            raise AssertionError("Blank ring UID must be rejected")
+
+
+def test_gateway_normalizes_ring_uid_and_rejects_empty_evidence():
+    from pydantic import ValidationError
+    from app.routers.device_gateway import GatewayArrival
+    from uuid import uuid4
+    base = {"message_id": uuid4(), "race_id": uuid4()}
+    assert GatewayArrival(**base, ring_uid="  RING-001  ").ring_uid == "RING-001"
+    for field in ("protocol", "original_scan"):
+        try:
+            GatewayArrival(**base, ring_uid="RING-001", **{field: "  "})
+        except ValidationError:
+            pass
+        else:
+            raise AssertionError(f"Blank {field} must be rejected")
