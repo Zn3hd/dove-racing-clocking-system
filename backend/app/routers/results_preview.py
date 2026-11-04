@@ -138,6 +138,10 @@ def preview_leaderboard(race_id: UUID, db: Session = Depends(get_db),
               SELECT 1 FROM clocking_reviews cr
               WHERE cr.event_id=c.id AND cr.decision='approve'
           )
+          AND NOT EXISTS (
+              SELECT 1 FROM clocking_reviews cr
+              WHERE cr.event_id=c.id AND cr.decision='reject'
+          )
           AND c.recorded_at > :released
         ORDER BY e.id,c.recorded_at ASC,c.id ASC
     """), {"race":race_id,"released":race["actual_release_at"]}).mappings().all()
@@ -152,7 +156,7 @@ def preview_leaderboard(race_id: UUID, db: Session = Depends(get_db),
             "arrival_at":event["arrival_at"],
             "distance_meters":float(event["distance_meters"]),
             "flight_duration_seconds":(event["arrival_at"]-race["actual_release_at"]).total_seconds(),
-            "speed_mpm":round(velocity,5),
+            "speed_mpm":velocity,
             "display_speed":round(convert_speed(velocity,race["display_speed_unit"]),4),
             "qualifying_status":"qualified" if velocity>=float(race["minimum_speed_mpm"]) else "below_minimum",
             "verification_status":"provisional",

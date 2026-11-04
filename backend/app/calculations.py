@@ -1,6 +1,6 @@
 """Pure race calculations; no hardware dependency."""
 from datetime import datetime
-from math import radians, sin, cos, asin, sqrt
+from math import radians, sin, cos, asin, sqrt, isfinite
 
 
 def distance_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -14,12 +14,14 @@ def speed_mpm(distance: float, release: datetime, arrival: datetime) -> float:
     if release.tzinfo is None or arrival.tzinfo is None:
         raise ValueError('Timezone-aware timestamps required')
     elapsed = (arrival-release).total_seconds()
-    if elapsed <= 0 or distance <= 0:
+    if not isfinite(distance) or elapsed <= 0 or distance <= 0:
         raise ValueError('Arrival must follow release; distance must be positive')
     return distance / (elapsed/60)
 
 
 def convert_speed(mpm: float, unit: str) -> float:
+    if not isfinite(mpm) or mpm < 0:
+        raise ValueError('Speed must be finite and nonnegative')
     if unit == 'm/min': return mpm
     if unit == 'm/s': return mpm/60
     if unit == 'km/h': return mpm*0.06
@@ -33,6 +35,9 @@ def leaderboard(rows: list[dict], mode: str = 'separate') -> list[dict]:
     for row in rows:
         if row['qualifying_status'] != 'qualified' or row['verification_status'] not in ('approved','provisional'):
             continue
+        velocity = float(row['speed_mpm'])
+        if not isfinite(velocity) or velocity < 0:
+            raise ValueError('Ranked speed must be finite and nonnegative')
         group = 'combined' if mode == 'combined' else ('guest' if row['clocking_method'] == 'QR' else 'member')
         groups.setdefault(group, []).append(row)
     result=[]
@@ -40,7 +45,8 @@ def leaderboard(rows: list[dict], mode: str = 'separate') -> list[dict]:
         entries.sort(key=lambda r: (-float(r['speed_mpm']), r['arrival_at'], str(r['entry_id'])))
         rank=0; prev=None
         for pos, row in enumerate(entries, 1):
-            velocity=round(float(row['speed_mpm']),4)
+            # Ranking uses full calculation precision; rounding is display-only.
+            velocity=float(row['speed_mpm'])
             if velocity != prev: rank=pos
             result.append({**row,'leaderboard':group,'rank':rank})
             prev=velocity

@@ -28,3 +28,24 @@ def test_separate_rankings_and_ties():
     combined=leaderboard(rows,"combined")
     assert len(combined)==2
     assert all(r["rank"]==1 for r in combined)
+
+
+def test_combined_ranking_ignores_nonqualifying_evidence_and_preserves_ties():
+    rows = [
+        {"entry_id": "rfid-1", "clocking_method": "RFID", "qualifying_status": "qualified",
+         "verification_status": "provisional", "speed_mpm": 1200, "arrival_at": "2026-01-01T10:00:00"},
+        {"entry_id": "qr-1", "clocking_method": "QR", "qualifying_status": "qualified",
+         "verification_status": "approved", "speed_mpm": 1200, "arrival_at": "2026-01-01T10:01:00"},
+        {"entry_id": "rfid-2", "clocking_method": "RFID", "qualifying_status": "qualified",
+         "verification_status": "provisional", "speed_mpm": 1100, "arrival_at": "2026-01-01T10:02:00"},
+        {"entry_id": "qr-slow", "clocking_method": "QR", "qualifying_status": "below_minimum",
+         "verification_status": "approved", "speed_mpm": 400, "arrival_at": "2026-01-01T10:03:00"},
+        {"entry_id": "unreviewed", "clocking_method": "QR", "qualifying_status": "qualified",
+         "verification_status": "pending", "speed_mpm": 1300, "arrival_at": "2026-01-01T10:04:00"},
+    ]
+    combined = leaderboard(rows, "combined")
+    assert [(r["entry_id"], r["rank"]) for r in combined] == [
+        ("rfid-1", 1), ("qr-1", 1), ("rfid-2", 3)]
+    separate = leaderboard(rows, "separate")
+    assert [(r["entry_id"], r["leaderboard"], r["rank"]) for r in separate] == [
+        ("qr-1", "guest", 1), ("rfid-1", "member", 1), ("rfid-2", "member", 2)]
