@@ -125,7 +125,8 @@ def test_gateway_replay_fingerprint_is_stable_and_tamper_sensitive():
     base = {"race_id": uuid4(), "message_id": uuid4(), "ring_uid": "R-001"}
     first = GatewayArrival(**base)
     # The original gateway envelope format remains compatible.
-    legacy = digest(json.dumps(first.model_dump(mode="json"), sort_keys=True))
+    legacy = digest(json.dumps(first.model_dump(mode="json", exclude={
+        "adapter_type", "protocol", "capture_mode", "original_scan"}), sort_keys=True))
     assert arrival_fingerprint(first) == legacy
     assert arrival_fingerprint(GatewayArrival(**base)) == legacy
     assert arrival_fingerprint(GatewayArrival(**base, ring_uid="R-002")) != legacy
