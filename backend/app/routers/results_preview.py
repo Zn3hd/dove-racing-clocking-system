@@ -29,6 +29,9 @@ def live_race(race_id: UUID, db: Session = Depends(get_db),
         {'id': race_id}).mappings().one()
     total = db.execute(text("SELECT count(*) FROM race_entries WHERE race_id=:id AND status='registered'"),
                        {'id': race_id}).scalar_one()
+    active_participants = db.execute(text("""SELECT count(DISTINCT l.user_id)
+        FROM race_entries e JOIN lofts l ON l.id=e.loft_id
+        WHERE e.race_id=:id AND e.status='registered'"""), {'id': race_id}).scalar_one()
     rows = []
     if race['actual_release_at'] is not None:
         events = db.execute(text('''SELECT DISTINCT ON (e.id)
@@ -78,7 +81,8 @@ def live_race(race_id: UUID, db: Session = Depends(get_db),
             'maximum_speed_mpm': float(race['maximum_speed_mpm']), **validation,
             'release_at': race['actual_release_at'], 'official': False,
             'updated_at': datetime.now(timezone.utc), 'speed_unit': race['display_speed_unit'],
-            'registered_entries': total, 'arrived_entries': len(rows), 'limit': 1000,
+            'registered_entries': total, 'active_participants': active_participants,
+            'arrived_entries': len(rows), 'limit': 1000,
             'possibly_truncated': len(rows) == 1000, 'entries': rows,
             'note': 'Provisional server-receipt timing. Automatic mode is declared, not verified. '
                     'Operator/manual captures require review; simulator scans are labeled. Official finalization is disabled.'}
