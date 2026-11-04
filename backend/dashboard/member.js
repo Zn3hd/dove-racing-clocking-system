@@ -1,8 +1,8 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
-let token = null, timer = null, busy = false, generation = 0, selectedRace = "";
+let token = null, timer = null, busy = false, generation = 0, selectedRace = "", refreshPending = false;
 function clearSession(message = "") {
-  generation += 1; token = null; clearTimeout(timer); timer = null;
+  generation += 1; token = null; refreshPending = false; clearTimeout(timer); timer = null;
   $("workspace").hidden = true; $("login-panel").hidden = false;
   $("signout").hidden = true; $("login-error").textContent = message;
   $("login-form").reset(); selectedRace = "";
@@ -78,17 +78,19 @@ function draw(data) {
   $("entries").replaceChildren(...(entryCards.length ? entryCards : [element("p","No race entries yet.","muted")]));
 }
 async function refresh() {
-  if (!token || busy) return;
+  if (!token) return;
+  if (busy) { refreshPending = true; return; }
   busy = true;
   const current = generation;
   try {
     const data = await request("/member/overview");
     if (current !== generation) return;
     draw(data);
-    if (selectedRace) {
+    const requestedRace = selectedRace;
+    if (requestedRace) {
       try {
-        const standings = await request("/member/races/" + encodeURIComponent(selectedRace) + "/standings");
-        if (current !== generation) return;
+        const standings = await request("/member/races/" + encodeURIComponent(requestedRace) + "/standings");
+        if (current !== generation || requestedRace !== selectedRace) return;
         drawStandings(standings);
       } catch (err) {
         $("standings-status").textContent = "Standings unavailable: " + err.message;
@@ -103,7 +105,10 @@ async function refresh() {
     if (current === generation) $("sync-status").textContent = "Update failed: " + err.message;
   } finally {
     busy = false;
-    if (current === generation && token) timer = setTimeout(refresh, 15000);
+    if (current === generation && token) {
+      if (refreshPending) { refreshPending = false; queueMicrotask(refresh); }
+      else timer = setTimeout(refresh, 15000);
+    }
   }
 }
 $("login-form").addEventListener("submit", async (event) => {
@@ -130,6 +135,9 @@ document.addEventListener("visibilitychange", () => {if (!document.hidden && tok
 
 $("standings-race").addEventListener("change", (event) => {
   selectedRace = event.target.value;
+  $("arrival-order").replaceChildren();
+  $("speed-ranking").replaceChildren();
+  $("standings-status").textContent = "Loading selected race standings…";
   clearTimeout(timer);
   refresh();
 });
