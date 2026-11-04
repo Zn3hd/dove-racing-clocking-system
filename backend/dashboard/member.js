@@ -82,3 +82,52 @@ $("login-form").addEventListener("submit", async (event) => {
 $("signout").addEventListener("click", () => clearSession());
 $("refresh").addEventListener("click", () => {clearTimeout(timer);refresh();});
 document.addEventListener("visibilitychange", () => {if (!document.hidden && token) {clearTimeout(timer);refresh();}});
+
+function publicPanel(id) {
+  $("login-panel").hidden = id !== "login-panel";
+  $("apply-panel").hidden = id !== "apply-panel";
+  $("status-panel").hidden = id !== "status-panel";
+}
+$("show-apply").addEventListener("click", async () => {
+  $("apply-message").textContent = "";
+  publicPanel("apply-panel");
+  try {
+    const clubs = await request("/membership/clubs");
+    const select = $("apply-form").elements.namedItem("club_id");
+    select.replaceChildren(...clubs.map(club => {
+      const option = element("option", club.name); option.value = club.id; return option;
+    }));
+    if (!clubs.length) $("apply-message").textContent = "No racing clubs are accepting applications yet.";
+  } catch (error) { $("apply-message").textContent = error.message; }
+});
+$("show-status").addEventListener("click", () => publicPanel("status-panel"));
+document.querySelectorAll(".back-login").forEach(button =>
+  button.addEventListener("click", () => publicPanel("login-panel")));
+$("apply-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('[type="submit"]');
+  button.disabled = true;
+  try {
+    const payload = Object.fromEntries(new FormData(event.currentTarget));
+    const data = await request("/membership/applications", {
+      method: "POST", body: JSON.stringify(payload)
+    });
+    $("apply-message").textContent = data.message;
+    event.currentTarget.reset();
+  } catch (error) { $("apply-message").textContent = error.message; }
+  finally { button.disabled = false; }
+});
+$("status-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('[type="submit"]');
+  button.disabled = true;
+  try {
+    const data = await request("/membership/status", {
+      method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget)))
+    });
+    $("status-message").textContent = "Status: " + data.status +
+      (data.reason ? ". Reason: " + data.reason : "") +
+      (data.status === "approved" ? ". You can now sign in." : "");
+  } catch (error) { $("status-message").textContent = error.message; }
+  finally { button.disabled = false; }
+});
