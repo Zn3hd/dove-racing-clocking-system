@@ -28,3 +28,17 @@ def test_member_overview_requires_member_role_and_scopes_private_data(scenario):
     assert {e["entry_id"] for e in data["race_entries"]} == {member_entry}
     assert guest_entry not in str(data)
     assert str(s["pigeon_guest"]) not in str(data)
+
+
+def test_member_dashboard_static_assets_are_served_without_admin_access(scenario):
+    client = scenario["client"]
+    for path, expected in (
+        ("/dashboard/member.html", "Member dashboard"),
+        ("/dashboard/member.css", ".shell"),
+        ("/dashboard/member.js", "/member/overview"),
+    ):
+        response = client.get(path)
+        assert response.status_code == 200, response.text
+        assert expected in response.text
+        assert "no-store" in response.headers["cache-control"]
+        assert "default-src 'self'" in response.headers["content-security-policy"]
