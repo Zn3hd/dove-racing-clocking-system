@@ -24,6 +24,7 @@ from .routers.manual_clocking import router as manual_clocking_router
 from .routers.sms_clocking import router as sms_clocking_router
 from .routers.messenger_clocking import router as messenger_clocking_router
 from .routers.member_dashboard import router as member_dashboard_router
+from .routers.membership import router as membership_router
 
 app = FastAPI(title="Pigeon Racing Clocking System API", version="0.2.0")
 
@@ -34,7 +35,7 @@ app.mount("/dashboard", StaticFiles(directory=Path(__file__).resolve().parents[1
 @app.middleware("http")
 async def dashboard_headers(request, call_next):
     response = await call_next(request)
-    if request.url.path.startswith(('/auth','/clocking','/races','/participants','/lofts','/pigeons','/devices','/clubs')):
+    if request.url.path.startswith(('/auth','/clocking','/races','/participants','/lofts','/pigeons','/devices','/clubs','/member','/membership')):
         response.headers['Cache-Control'] = 'no-store'
     if request.url.path.startswith("/dashboard"):
         response.headers["Content-Security-Policy"] = (
@@ -103,3 +104,4 @@ app.include_router(sms_clocking_router)
 app.include_router(messenger_clocking_router)
 
 app.include_router(member_dashboard_router)
+app.include_router(membership_router)
