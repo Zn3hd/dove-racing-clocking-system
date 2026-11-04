@@ -2,7 +2,7 @@ name: Backend tests
 
 on:
   push:
-    branches: [develop, main, feature/phase7-member-dashboard]
+    branches: [develop, main, feature/phase8-membership-applications]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
@@ -61,6 +61,7 @@ jobs:
               conn.execute(Path("sql/012_loft_address.sql").read_text())
               conn.execute(Path("sql/013_rate_limits.sql").read_text())
               conn.execute(Path("sql/014_reader_monitoring.sql").read_text())
+              conn.execute(Path("sql/015_membership_applications.sql").read_text())
           PY
       - name: Compile Python source (catch syntax errors)
         run: python -m compileall -q app tests
