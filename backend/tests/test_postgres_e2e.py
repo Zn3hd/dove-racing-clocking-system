@@ -74,6 +74,7 @@ def scenario(monkeypatch):
                    {"ids":pigeon_ids})
         db.execute(text("DELETE FROM races WHERE created_by = :id"), {"id":admin})
         db.execute(text("DELETE FROM club_memberships WHERE club_id IN (SELECT id FROM clubs WHERE created_by=:id)"), {"id":admin})
+        db.execute(text("DELETE FROM membership_applications WHERE club_id IN (SELECT id FROM clubs WHERE created_by=:id)"), {"id":admin})
         db.execute(text("DELETE FROM clubs WHERE created_by=:id"), {"id":admin})
         db.execute(text("DELETE FROM devices WHERE id=ANY(:devices)"), {"devices":device_ids})
         db.execute(text("DELETE FROM rfid_rings WHERE pigeon_id=ANY(:ids)"), {"ids":pigeon_ids})
