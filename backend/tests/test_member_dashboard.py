@@ -52,7 +52,7 @@ def test_member_standings_are_scoped_and_do_not_expose_private_identifiers(scena
     endpoint = f"/member/races/{race}/standings"
     assert c.get(endpoint).status_code == 401
     assert c.get(endpoint, headers=s["headers"](s["admin"])).status_code == 403
-    assert c.get(endpoint, headers=s["headers"](s["guest"])).status_code == 404
+    assert c.get(endpoint, headers=s["headers"](s["guest"])).status_code == 403
     response = c.get(endpoint, headers=s["headers"](s["member"]))
     assert response.status_code == 200, response.text
     result = response.json()
