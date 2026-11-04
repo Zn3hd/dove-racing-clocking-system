@@ -524,6 +524,8 @@ def test_live_race_first_eligible_arrival_and_review_policy(scenario):
     assert live['official'] is False
     assert live['arrived_entries'] == 1
     row = live['entries'][0]
+    assert isinstance(row['loft_name'], str) and row['loft_name'].strip()
+    assert row['loft_id'] is not None
     assert row['entry_id'] == member_entry
     assert row['event_id'] == automatic.json()['event_id']
     assert row['capture_mode'] == 'automatic'

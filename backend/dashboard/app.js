@@ -306,7 +306,64 @@ function showView(view) {
   if (view === 'operations') window.Operations.load();
 }
 
+let insightSnapshot = null;
+function renderInsights(data) {
+  insightSnapshot = data;
+  const raceOption = $("#live-race").selectedOptions[0];
+  $("#telemetry-race").textContent = raceOption?.value ? raceOption.textContent : "Select a race";
+  $("#telemetry-status").textContent = data.race_status || "—";
+  $("#telemetry-release").textContent = data.release_at ? new Date(data.release_at).toLocaleString() : "Not released";
+  $("#telemetry-entries").textContent = String(data.registered_entries);
+  const remaining = Math.max(0, data.registered_entries - data.arrived_entries);
+  $("#telemetry-progress").textContent = data.arrived_entries + " / " + remaining;
+  const percent = data.registered_entries > 0 ? Math.min(100, 100 * data.arrived_entries / data.registered_entries) : 0;
+  $("#telemetry-progress-bar").style.width = percent.toFixed(1) + "%";
+  $("#telemetry-percent").textContent = percent.toFixed(1) + "% arrived";
+  const mode = $("#insight-leader-mode").value;
+  const qualified = data.entries.filter(row => row.rank != null && Number.isFinite(Number(row.display_speed)));
+  let leaders;
+  if (mode === "owner" || mode === "loft") {
+    const groups = new Map();
+    for (const row of qualified) {
+      const key = mode === "loft" ? String(row.loft_id) : (row.owner_name || "Unknown owner");
+      const name = mode === "loft" ? (row.loft_name || "Unnamed loft") : (row.owner_name || "Unknown owner");
+      const current = groups.get(key) || { name, count: 0, sum: 0 };
+      current.count += 1;
+      current.sum += Number(row.display_speed);
+      groups.set(key, current);
+    }
+    leaders = [...groups.values()].map(g => ({ name: g.name, count: g.count, speed: g.sum / g.count }))
+      .sort((a, b) => b.speed - a.speed).slice(0, 5);
+  } else {
+    leaders = qualified.map(row => ({ name: row.official_ring_number, count: null, speed: Number(row.display_speed) }))
+      .sort((a, b) => b.speed - a.speed).slice(0, 5);
+  }
+  const list = $("#insight-leaders");
+  list.replaceChildren();
+  if (!leaders.length) {
+    list.append(element("li", "insight-empty", "No qualifying results yet."));
+    return;
+  }
+  for (const item of leaders) {
+    const li = element("li");
+    const identity = element("span", "insight-name", item.name);
+    if (item.count !== null) identity.append(element("small", "", item.count + " qualifying pigeon(s)"));
+    const speed = element("strong", "insight-speed", item.speed.toFixed(2) + " " + data.speed_unit);
+    li.append(identity, speed);
+    list.append(li);
+  }
+}
+$("#insight-leader-mode").addEventListener("change", () => { if (insightSnapshot) renderInsights(insightSnapshot); });
 function resetLive(text) {
+  insightSnapshot = null;
+  $("#telemetry-race").textContent = "Select a race";
+  $("#telemetry-status").textContent = "—";
+  $("#telemetry-release").textContent = "—";
+  $("#telemetry-entries").textContent = "—";
+  $("#telemetry-progress").textContent = "—";
+  $("#telemetry-progress-bar").style.width = "0%";
+  $("#telemetry-percent").textContent = "—";
+  $("#insight-leaders").replaceChildren(element("li", "insight-empty", "No qualifying results yet."));
   $("#live-rows").replaceChildren();
   $("#validation-rows").replaceChildren();
   $("#validation-summary").textContent = "Select a race to inspect clocking evidence.";
@@ -355,6 +412,7 @@ async function loadRaces() {
 }
 
 function renderLive(data) {
+  renderInsights(data);
   $("#validation-summary").textContent = `${data.suspicious_events} flagged · ${data.repeat_scans} repeat scans · ${data.simulated_events} simulated · Maximum ${data.maximum_speed_mpm} m/min`;
   const flaggedBody = $("#validation-rows");
   flaggedBody.replaceChildren();

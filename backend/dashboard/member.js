@@ -29,29 +29,61 @@ function item(title, lines) {
   for (const [label, value] of lines) card.append(element("p", label + ": " + value));
   return card;
 }
+function leaderboardRow(e, position, unit, ranked = false) {
+  const row = element("article", undefined, "leader-row");
+  const head = element("button", undefined, "leader-main");
+  head.type = "button";
+  head.setAttribute("aria-expanded", "false");
+  const number = element("span", String(position).padStart(2, "0"), "leader-position");
+  const identity = element("span", undefined, "leader-identity");
+  identity.append(element("strong", e.official_ring_number), element("small", new Date(e.arrival_at).toLocaleString()));
+  const speed = element("span", undefined, "leader-speed");
+  speed.append(element("strong", Number(e.display_speed).toFixed(2)), element("small", unit));
+  const arrow = element("span", "⌄", "leader-chevron");
+  arrow.setAttribute("aria-hidden", "true");
+  head.append(number, identity, speed, arrow);
+  const details = element("div", undefined, "leader-details");
+  details.hidden = true;
+  const fields = [
+    ["Owner", e.owner_name],
+    ["Distance", Number(e.distance_meters).toFixed(0) + " m"],
+    ["Capture", e.capture_mode === "simulated" ? "SIMULATED — TEST ONLY" : e.capture_mode],
+    ["Qualification", e.qualifying_status || "Pending review"],
+    ["Result", "NOT OFFICIAL"]
+  ];
+  if (ranked) fields.unshift(["Leaderboard", e.leaderboard]);
+  for (const [label, value] of fields) {
+    const cell = element("div", undefined, "leader-detail");
+    cell.append(element("small", label), element("strong", value == null ? "—" : value));
+    details.append(cell);
+  }
+  head.addEventListener("click", () => {
+    details.hidden = !details.hidden;
+    head.setAttribute("aria-expanded", String(!details.hidden));
+  });
+  row.append(head, details);
+  return row;
+}
 function drawStandings(data) {
   const arrivals = [...data.entries].sort((a,b) => a.arrival_order - b.arrival_order);
   const unit = data.speed_unit || "m/min";
-  const format = (e) => [
-    ["Owner", e.owner_name],
-    ["Detected", new Date(e.arrival_at).toLocaleString()],
-    ["Distance", Number(e.distance_meters).toFixed(0) + " m"],
-    ["Speed", Number(e.display_speed).toFixed(2) + " " + unit],
-    ["Capture", e.capture_mode === "simulated" ? "SIMULATED — TEST ONLY" : e.capture_mode]
-  ];
-  $("arrival-order").replaceChildren(...(arrivals.length ? arrivals.map(e =>
-    item("Arrival #" + e.arrival_order + " · " + e.official_ring_number, format(e))) :
-    [element("p","No eligible arrivals yet.","muted")]));
   const ranked = [...data.entries].filter(e => e.rank != null).sort((a,b) =>
     a.leaderboard.localeCompare(b.leaderboard) || a.rank - b.rank);
+  $("arrival-order").replaceChildren(...(arrivals.length ? arrivals.map(e =>
+    leaderboardRow(e, e.arrival_order, unit)) :
+    [element("p", "No eligible arrivals yet.", "muted empty-board")]));
   $("speed-ranking").replaceChildren(...(ranked.length ? ranked.map(e =>
-    item(e.leaderboard + " · Provisional #" + e.rank + " · " + e.official_ring_number, [
-      ...format(e), ["Qualification", e.qualifying_status], ["Result", "NOT OFFICIAL"]
-    ])) : [element("p","No qualifying calculated rankings yet. Below-minimum arrivals remain visible above.","muted")]));
+    leaderboardRow(e, e.rank, unit, true)) :
+    [element("p", "No qualifying speed rankings yet. Below-minimum arrivals remain visible in arrival order.", "muted empty-board")]));
   $("standings-status").textContent = data.possibly_truncated ?
-    "Showing a limited provisional preview. Not official." :
+    "Limited provisional preview · NOT OFFICIAL" :
     "Updated provisional results · " + data.arrived_entries + " arrivals · NOT OFFICIAL";
+  $("leader-arrived").textContent = data.arrived_entries;
+  $("leader-qualified").textContent = ranked.length;
+  $("leader-fastest").textContent = arrivals.length ? Math.max(...arrivals.map(e => Number(e.display_speed))).toFixed(2) : "—";
+  $("leader-unit").textContent = unit;
 }
+
 function draw(data) {
   $("welcome").textContent = "Welcome, " + data.full_name;
   const races = [...new Map(data.race_entries.map(e => [e.race_id, {id:e.race_id,name:e.race_name,status:e.race_status}])).values()];
@@ -93,7 +125,7 @@ async function refresh() {
         if (current !== generation || requestedRace !== selectedRace) return;
         drawStandings(standings);
       } catch (err) {
-        $("standings-status").textContent = "Standings unavailable: " + err.message;
+        if (current === generation && requestedRace === selectedRace) $("standings-status").textContent = "Standings unavailable: " + err.message;
       }
     } else {
       $("arrival-order").replaceChildren();

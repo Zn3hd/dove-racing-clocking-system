@@ -2,7 +2,7 @@ name: Backend tests
 
 on:
   push:
-    branches: [develop, main, feature/phase9-member-live-rankings]
+    branches: [develop, main, 'feature/**']
   pull_request:
     branches: [main, develop]
   workflow_dispatch:

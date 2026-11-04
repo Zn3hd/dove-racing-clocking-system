@@ -60,6 +60,26 @@
           <div class="live-controls"><label>Race<select id="live-race"><option value="">Select a race</option></select></label><button id="reload-races" class="outline" type="button">Reload races</button></div>
           <p class="field-help">Rank is based on speed, not arrival order. Timing uses server receipt, including buffered uploads. Automatic capture is device-declared; operator/manual scans require review. Simulated scans are labeled.</p>
           <div class="stats"><article><span>Registered pigeons</span><strong id="live-total">-</strong><small id="live-release">Release not loaded</small></article><article><span>Eligible arrivals</span><strong id="live-arrived">-</strong><small>One first eligible event per entry</small></article><article><span>Race status</span><strong id="live-status" class="race-status">-</strong><small id="live-updated">Not synchronized</small></article></div>
+          <div class="race-insights">
+            <section class="members-card race-insight-card" aria-labelledby="telemetry-heading">
+              <div class="directory-header"><div><p class="eyebrow">RACE INTELLIGENCE</p><h2 id="telemetry-heading">◈ Active race telemetry</h2><p class="muted">Current race data from the live feed · provisional</p></div></div>
+              <dl class="race-telemetry">
+                <div><dt>Race</dt><dd id="telemetry-race">Select a race</dd></div>
+                <div><dt>Race status</dt><dd id="telemetry-status">—</dd></div>
+                <div><dt>Release time</dt><dd id="telemetry-release">—</dd></div>
+                <div><dt>Registered entries</dt><dd id="telemetry-entries">—</dd></div>
+                <div><dt>Arrived / remaining</dt><dd id="telemetry-progress">—</dd></div>
+                <div><dt>Arrival progress</dt><dd><div class="race-progress"><span id="telemetry-progress-bar"></span></div><small id="telemetry-percent">—</small></dd></div>
+                <div><dt>Release GPS / wind</dt><dd>Not available in this live feed</dd></div>
+              </dl>
+            </section>
+            <section class="members-card race-insight-card" aria-labelledby="loft-leaders-heading">
+              <div class="directory-header"><div><p class="eyebrow">PERFORMANCE</p><h2 id="loft-leaders-heading">◇ Top competitors</h2><p class="muted">Provisional speeds · qualifying entries only</p></div>
+                <label class="insight-filter">View<select id="insight-leader-mode"><option value="pigeon">Pigeons</option><option value="loft">Lofts</option><option value="owner">Owners</option></select></label></div>
+              <p id="insight-loft-note" class="field-help">Loft averages group qualifying arrivals by their registered loft ID. Provisional, not official.</p>
+              <ol id="insight-leaders" class="insight-leaders"><li>No qualifying results yet.</li></ol>
+            </section>
+          </div>
           <section class="members-card" aria-labelledby="standings-heading"><div class="directory-header"><div><h2 id="standings-heading">Live standings</h2><p class="muted">Distance comes from the registered release and loft coordinates.</p></div></div>
             <div class="table-wrap"><table><thead><tr><th scope="col">Rank / group</th><th scope="col">Pigeon / owner</th><th scope="col">Arrival order / time</th><th scope="col">Distance</th><th scope="col">Speed</th><th scope="col">Evidence</th></tr></thead><tbody id="live-rows"></tbody></table></div>
             <div id="live-state" class="directory-state" role="status">Select a race to see its arrivals.</div>
