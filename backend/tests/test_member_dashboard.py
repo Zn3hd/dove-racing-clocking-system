@@ -42,3 +42,21 @@ def test_member_dashboard_static_assets_are_served_without_admin_access(scenario
         assert expected in response.text
         assert "no-store" in response.headers["cache-control"]
         assert "default-src 'self'" in response.headers["content-security-policy"]
+
+
+def test_member_standings_are_scoped_and_do_not_expose_private_identifiers(scenario):
+    s = scenario
+    c = s["client"]
+    race = make_race(s)
+    register(s, race, s["pigeon_member"], "RFID")
+    endpoint = f"/member/races/{race}/standings"
+    assert c.get(endpoint).status_code == 401
+    assert c.get(endpoint, headers=s["headers"](s["admin"])).status_code == 403
+    assert c.get(endpoint, headers=s["headers"](s["guest"])).status_code == 403
+    response = c.get(endpoint, headers=s["headers"](s["member"]))
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["official"] is False
+    assert result["entries"] == []
+    assert "device_id" not in response.text
+    assert "rfid_uid" not in response.text

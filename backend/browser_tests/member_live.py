@@ -60,6 +60,15 @@ def test_member_login_private_pigeons_and_expired_session(live_server):
     })
     assert entry.status_code == 201, entry.text
 
+    second_race = ok(api.post("/races", headers=headers, json={
+        "name": "Second Browser Race", "release_latitude": 10,
+        "release_longitude": 125.6,
+    }), 201)["id"]
+    assert api.post(f"/races/{second_race}/open", headers=headers).status_code == 200
+    assert api.post(f"/races/{second_race}/entries", headers=headers, json={
+        "pigeon_id": str(own_pigeon_id), "expected_method": "RFID",
+    }).status_code == 201
+
     errors = []
     with sync_playwright() as tool:
         options = {"headless": True}
@@ -81,6 +90,12 @@ def test_member_login_private_pigeons_and_expired_session(live_server):
             expect(page.locator("#pigeon-count")).to_have_text("1")
             expect(page.locator("#entries")).to_contain_text("Member Browser Race")
             expect(page.locator("#entries")).to_contain_text("No scan recorded")
+            expect(page.locator("#standings-race option")).to_have_count(2)
+            expect(page.locator("#standings-status")).to_contain_text("NOT OFFICIAL")
+            expect(page.locator("#arrival-order")).to_contain_text("No eligible arrivals yet")
+            page.locator("#standings-race").select_option(race_id)
+            expect(page.locator("#standings-status")).to_contain_text("NOT OFFICIAL")
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             assert page.evaluate("localStorage.length + sessionStorage.length") == 0
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             assert page.locator("#workspace button").all_text_contents() == ["Refresh"]

@@ -1,5 +1,7 @@
 """Read-only, owner-scoped data for remote member monitoring."""
 from fastapi import APIRouter, Depends, HTTPException
+from uuid import UUID
+from .results_preview import live_race
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -52,4 +54,34 @@ def member_overview(db: Session = Depends(get_db),
         "pigeons": [dict(row) for row in pigeons],
         "race_entries": [dict(row) for row in entries],
         "note": "Scan detection is provisional evidence, not an official result or verified arrival.",
+    }
+
+
+@router.get("/races/{race_id}/standings")
+def member_race_standings(race_id: UUID, db: Session = Depends(get_db),
+                         actor: dict = Depends(require_member)):
+    """Public-to-participants race standings; never expose private device/loft evidence."""
+    allowed = db.execute(text("""
+        SELECT 1 FROM race_entries e
+        JOIN lofts l ON l.id=e.loft_id
+        WHERE e.race_id=:race AND l.user_id=:owner AND e.status='registered'
+        LIMIT 1
+    """), {"race":race_id,"owner":actor["id"]}).first()
+    if not allowed:
+        raise HTTPException(404, "Race not found")
+    preview = live_race(race_id, db=db, actor=actor)
+    fields = ("official_ring_number","owner_name","arrival_at","arrival_order",
+              "rank","leaderboard","distance_meters","flight_duration_seconds",
+              "display_speed","qualifying_status","verification_status",
+              "capture_mode","clocking_method")
+    return {
+        "race_id": race_id, "race_name": preview["race_name"],
+        "race_status": preview["race_status"], "official": False,
+        "speed_unit": preview["speed_unit"], "release_at": preview["release_at"],
+        "registered_entries": preview["registered_entries"],
+        "arrived_entries": preview["arrived_entries"],
+        "possibly_truncated": preview["possibly_truncated"],
+        "entries": [{key: row.get(key) for key in fields} for row in preview["entries"]],
+        "note": "Arrival order is not final rank. Calculated ranks are provisional, "
+                "exclude below-minimum speed, and require official finalization.",
     }

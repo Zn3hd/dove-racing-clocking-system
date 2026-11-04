@@ -12,6 +12,11 @@
 <div id="workspace" hidden>
 <div class="toolbar"><p id="welcome"></p><span id="sync-status" role="status">Connecting…</span><button id="refresh" type="button">Refresh</button></div>
 <div class="stats"><article class="panel"><span>My pigeons</span><strong id="pigeon-count">0</strong></article><article class="panel"><span>Active race entries</span><strong id="active-count">0</strong></article><article class="panel"><span>Scans detected</span><strong id="scan-count">0</strong></article></div>
+<section class="panel"><h2>Live race standings</h2><p class="muted">Arrival order includes only eligible evidence after race release; rejected, blocked, and unreviewed manual scans are excluded. Arrival order is not final rank. Speed rankings remain provisional until official review and finalization.</p>
+<label for="standings-race">Race</label><select id="standings-race"></select>
+<p id="standings-status" class="muted" role="status"></p>
+<h3>First to arrive</h3><div id="arrival-order" class="cards"></div>
+<h3>Calculated speed ranking — provisional</h3><div id="speed-ranking" class="cards"></div></section>
 <section class="panel"><h2>My pigeons</h2><div id="pigeons" class="cards"></div></section>
 <section class="panel"><h2>My race entries</h2><p class="muted">Scans are provisional evidence, not official results. Refreshes every 15 seconds.</p><div id="entries" class="cards"></div></section>
 </div></main><script src="/dashboard/member.js" defer></script></body></html>
