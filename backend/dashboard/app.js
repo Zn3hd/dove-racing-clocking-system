@@ -322,14 +322,15 @@ function renderInsights(data) {
   const mode = $("#insight-leader-mode").value;
   const qualified = data.entries.filter(row => row.rank != null && Number.isFinite(Number(row.display_speed)));
   let leaders;
-  if (mode === "owner") {
+  if (mode === "owner" || mode === "loft") {
     const groups = new Map();
     for (const row of qualified) {
-      const name = row.owner_name || "Unknown owner";
-      const current = groups.get(name) || { name, count: 0, sum: 0 };
+      const key = mode === "loft" ? String(row.loft_id) : (row.owner_name || "Unknown owner");
+      const name = mode === "loft" ? (row.loft_name || "Unnamed loft") : (row.owner_name || "Unknown owner");
+      const current = groups.get(key) || { name, count: 0, sum: 0 };
       current.count += 1;
       current.sum += Number(row.display_speed);
-      groups.set(name, current);
+      groups.set(key, current);
     }
     leaders = [...groups.values()].map(g => ({ name: g.name, count: g.count, speed: g.sum / g.count }))
       .sort((a, b) => b.speed - a.speed).slice(0, 5);
