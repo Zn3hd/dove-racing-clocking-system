@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light"><title>My Pigeons · Dove Racing</title>
+<link rel="stylesheet" href="/dashboard/member.css"></head>
+<body><main class="shell">
+<header><div><p class="eyebrow">DOVE RACING</p><h1>Member dashboard</h1><p class="muted">Your pigeons and race activity</p></div><button id="signout" type="button" hidden>Sign out</button></header>
+<section id="login-panel" class="panel"><h2>Member sign in</h2><form id="login-form">
+<label>Email <input name="email" type="email" autocomplete="username" required></label>
+<label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+<button type="submit">Sign in</button></form><p id="login-error" class="error" role="alert"></p>
+<p class="muted">Club administrators create member accounts. Administrator tools are not available here.</p></section>
+<div id="workspace" hidden>
+<div class="toolbar"><p id="welcome"></p><span id="sync-status" role="status">Connecting…</span><button id="refresh" type="button">Refresh</button></div>
+<div class="stats"><article class="panel"><span>My pigeons</span><strong id="pigeon-count">0</strong></article><article class="panel"><span>Active race entries</span><strong id="active-count">0</strong></article><article class="panel"><span>Scans detected</span><strong id="scan-count">0</strong></article></div>
+<section class="panel"><h2>My pigeons</h2><div id="pigeons" class="cards"></div></section>
+<section class="panel"><h2>My race entries</h2><p class="muted">Scans are provisional evidence, not official results. Refreshes every 15 seconds.</p><div id="entries" class="cards"></div></section>
+</div></main><script src="/dashboard/member.js" defer></script></body></html>
