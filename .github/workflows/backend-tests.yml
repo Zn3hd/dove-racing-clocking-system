@@ -2,7 +2,7 @@ name: Backend tests
 
 on:
   push:
-    branches: [develop, main]
+    branches: [develop, main, feature/phase4-clocking-hardening]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
