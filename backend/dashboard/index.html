@@ -56,10 +56,11 @@
         </section>
         </div>
         <section id="live-view" hidden aria-labelledby="live-heading">
-          <div class="page-heading"><div><p class="eyebrow">FROM THE LOFT TO THE FINISH</p><h1 id="live-heading">Live race</h1><p class="muted">First eligible arrivals. Rankings update every 3 seconds while this view is open.</p></div><span class="badge guest">Provisional results</span></div>
+          <div class="page-heading race-page-heading"><div><p class="eyebrow">DOVE RACING / LIVE MONITORING</p><h1 id="live-heading">Race Command Center</h1><p class="muted">Live clocking and race monitoring · refreshes every 3 seconds</p></div><span class="badge guest">● Provisional</span></div>
+          <div class="race-hero"><div><span class="race-hero-kicker">● LIVE RACE OVERVIEW</span><h2 id="race-hero-title">Select a race to begin</h2><p id="race-hero-subtitle">Waiting for race details</p></div><span class="race-hero-mark" aria-hidden="true">◈</span></div>
           <div class="live-controls"><label>Race<select id="live-race"><option value="">Select a race</option></select></label><button id="reload-races" class="outline" type="button">Reload races</button></div>
           <p class="field-help">Rank is based on speed, not arrival order. Timing uses server receipt, including buffered uploads. Automatic capture is device-declared; operator/manual scans require review. Simulated scans are labeled.</p>
-          <div class="stats"><article><span>Registered pigeons</span><strong id="live-total">-</strong><small id="live-release">Release not loaded</small></article><article><span>Eligible arrivals</span><strong id="live-arrived">-</strong><small>One first eligible event per entry</small></article><article><span>Race status</span><strong id="live-status" class="race-status">-</strong><small id="live-updated">Not synchronized</small></article></div>
+          <div class="stats race-kpis"><article><span>Registered pigeons</span><strong id="live-total">—</strong><small id="live-release">Release not loaded</small></article><article><span>Arrived</span><strong id="live-arrived">—</strong><small id="race-arrived-percent">Eligible arrivals</small></article><article><span>In transit</span><strong id="race-in-transit">—</strong><small>Registered entries not arrived</small></article><article><span>Top speed</span><strong id="race-top-speed">—</strong><small id="race-speed-unit">Observed · provisional</small></article><article><span>Active participants</span><strong id="race-participants">—</strong><small>Owners with registered entries</small></article></div><p class="race-sync"><span id="live-status" class="race-status">—</span> · <span id="live-updated">Not synchronized</span></p>
           <div class="race-insights">
             <section class="members-card race-insight-card" aria-labelledby="telemetry-heading">
               <div class="directory-header"><div><p class="eyebrow">RACE INTELLIGENCE</p><h2 id="telemetry-heading">◈ Active race telemetry</h2><p class="muted">Current race data from the live feed · provisional</p></div></div>
@@ -75,7 +76,7 @@
             </section>
             <section class="members-card race-insight-card" aria-labelledby="loft-leaders-heading">
               <div class="directory-header"><div><p class="eyebrow">PERFORMANCE</p><h2 id="loft-leaders-heading">◇ Top competitors</h2><p class="muted">Provisional speeds · qualifying entries only</p></div>
-                <label class="insight-filter">View<select id="insight-leader-mode"><option value="pigeon">Pigeons</option><option value="loft">Lofts</option><option value="owner">Owners</option></select></label></div>
+                <label class="insight-filter">View<select id="insight-leader-mode"><option value="loft">Lofts</option><option value="pigeon">Pigeons</option><option value="owner">Owners</option></select></label></div>
               <p id="insight-loft-note" class="field-help">Loft averages group qualifying arrivals by their registered loft ID. Provisional, not official.</p>
               <ol id="insight-leaders" class="insight-leaders"><li>No qualifying results yet.</li></ol>
             </section>

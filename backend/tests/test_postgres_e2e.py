@@ -497,6 +497,7 @@ def test_live_race_first_eligible_arrival_and_review_policy(scenario):
     before = c.get(live_url, headers=admin)
     assert before.status_code == 200
     assert before.json()['registered_entries'] == 2
+    assert before.json()['active_participants'] == 2
     assert before.json()['entries'] == []
     token = c.post('/clocking/qr/tokens', headers=admin, json={'entry_id': guest_entry}).json()['token']
     assert c.post(f'/races/{race}/activate', headers=admin).status_code == 200

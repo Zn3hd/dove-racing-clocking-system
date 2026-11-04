@@ -83,3 +83,62 @@ dialog::backdrop{background:#1c142d88}
 .insight-leaders li.insight-empty:before{content:"—"}
 @media(max-width:900px){.race-insights{grid-template-columns:1fr}}
 @media(max-width:520px){.race-insight-card .directory-header{flex-wrap:wrap}.race-telemetry{padding:0 15px 15px}.insight-leaders{padding:0 15px 15px}#insight-loft-note{padding:0 15px}.race-telemetry dd{max-width:60%}}
+
+
+/* Pastel Race Center v2: presentation only; existing views and controls remain. */
+:root{--ink:#122447;--muted:#66758d;--blue:#326dd1;--mint:#dcefe9;--line:#e4eaf5;--race-shadow:0 9px 28px rgba(38,67,116,.07)}
+body{background:linear-gradient(132deg,#fff9f8 0%,#f3f5ff 48%,#eaf8fc 100%) fixed;color:var(--ink)}
+.workspace{background:transparent}.main-shell{background:transparent}
+.sidebar{background:linear-gradient(175deg,#fefaff 0%,#f0f3ff 64%,#e4f1ff 100%);border-right:1px solid #dfe7f4;color:#15254b}
+.sidebar .brand,.sidebar .club-label,.sidebar .sidebar-bottom{color:#182b4d}
+.sidebar .nav-item{color:#324667;border-radius:13px}
+.sidebar .nav-item:hover{background:#e7f0ff;color:#1b56ac}
+.sidebar .nav-item.selected{background:#dcecff;color:#174c9e;box-shadow:none}
+.sidebar .pilot-label{color:#335f9b}
+.topbar{background:rgba(255,255,255,.78);border-bottom:1px solid #e5eafa;backdrop-filter:blur(16px)}
+.content{max-width:1520px}
+.members-card,.setup-card,.stats article,.race-insight-card{background:rgba(255,255,255,.94);border:1px solid #e4eaf5;border-radius:20px;box-shadow:var(--race-shadow)}
+.primary{background:#326dd1}.primary:hover{background:#255bb5}
+.outline{border-color:#dce5f4;color:#24446e;border-radius:11px}
+input,select,textarea{border-color:#dce5f4;border-radius:11px}
+.page-heading h1{color:#102347}
+#live-view .race-page-heading{margin-bottom:18px}
+#live-view .race-page-heading h1{font-size:clamp(1.8rem,3vw,2.65rem);letter-spacing:-.045em}
+#live-view .race-hero{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:space-between;gap:16px;background:linear-gradient(105deg,#eaf3ff 0%,#f5eeff 58%,#e0f3ff 100%);border:1px solid #e1e7fa;border-radius:21px;padding:26px 30px;margin:0 0 16px;min-height:146px}
+#live-view .race-hero:after{content:"";position:absolute;width:280px;height:280px;border-radius:50%;background:#fff8;right:-90px;top:-190px}
+#live-view .race-hero h2{position:relative;font-size:clamp(1.35rem,2.4vw,2rem);letter-spacing:-.04em;color:#112449;margin:10px 0 7px}
+#live-view .race-hero p{position:relative;color:#536b91;margin:0;font-size:13px}
+#live-view .race-hero-kicker{font-size:11px;letter-spacing:.1em;font-weight:800;color:#13775d}
+#live-view .race-hero-mark{font-size:68px;color:#82a9ed;opacity:.65;position:relative;z-index:1}
+#live-view .live-controls{margin:0 0 14px}
+#live-view .race-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:0 0 10px}
+#live-view .race-kpis article{padding:19px 17px;min-width:0}
+#live-view .race-kpis article span{font-size:12px;color:#64738c}
+#live-view .race-kpis article strong{display:block;color:#183c78;font-size:clamp(1.35rem,2vw,2rem);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;letter-spacing:-.045em}
+#live-view .race-kpis article small{color:#75849b;font-size:11px}
+#live-view .race-sync{font-size:12px;color:#67778e;margin:0 0 20px}
+#live-view .race-insights{gap:15px}
+#live-view .race-insight-card{min-width:0}
+#live-view .race-telemetry dt{color:#63748f}
+#live-view .race-progress{background:#e9f0ff}
+#live-view .race-progress span{background:#4d8fe7}
+#live-view .insight-leaders li{border-color:#e9eef8}
+#live-view .insight-speed{color:#235fbf}
+#live-view .insight-filter select{border-color:#dce5f4}
+#live-view .members-card h2{color:#15284d}
+#live-view .table-wrap{border-radius:13px}
+#live-view thead{background:#f0f5fd}
+#live-view .field-help{color:#65758f}
+@media(max-width:1150px){#live-view .race-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){
+  #live-view .race-hero{padding:20px 18px;min-height:120px}
+  #live-view .race-hero-mark{font-size:38px}
+  #live-view .race-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  #live-view .race-kpis article{padding:15px 13px;border-radius:16px}
+  #live-view .race-kpis article:last-child{grid-column:auto}
+  #live-view .race-insights{display:flex;flex-direction:column}
+  #live-view .race-insight-card{width:100%}
+  #live-view .race-page-heading{align-items:flex-start}
+  #live-view .race-kpis article strong{font-size:1.45rem}
+  #live-view .race-kpis article small{font-size:10px}
+}
