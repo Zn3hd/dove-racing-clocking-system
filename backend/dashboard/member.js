@@ -65,6 +65,18 @@ function leaderboardRow(e, position, unit, ranked = false) {
   return row;
 }
 function drawStandings(data) {
+  $("member-race-name").textContent = data.race_name || "Selected race";
+  $("member-race-release").textContent = data.release_at
+    ? "Released " + new Date(data.release_at).toLocaleString() + " · provisional results"
+    : "Not released · provisional results";
+  $("member-arrived").textContent = String(data.arrived_entries);
+  $("member-transit").textContent = String(Math.max(0, data.registered_entries - data.arrived_entries));
+  $("member-arrived-pct").textContent = data.registered_entries
+    ? (100 * data.arrived_entries / data.registered_entries).toFixed(1) + "% of registered pigeons" : "Eligible arrivals";
+  $("member-participants").textContent = data.active_participants == null ? "—" : String(data.active_participants);
+  const speeds = data.entries.map(e => Number(e.display_speed)).filter(Number.isFinite);
+  $("member-top-speed").textContent = speeds.length ? Math.max(...speeds).toLocaleString(undefined,{maximumFractionDigits:2}) : "—";
+  $("member-speed-unit").textContent = (data.speed_unit || "m/min") + " · observed, provisional";
   const arrivals = [...data.entries].sort((a,b) => a.arrival_order - b.arrival_order);
   const unit = data.speed_unit || "m/min";
   const ranked = [...data.entries].filter(e => e.rank != null).sort((a,b) =>
@@ -128,6 +140,11 @@ async function refresh() {
         if (current === generation && requestedRace === selectedRace) $("standings-status").textContent = "Standings unavailable: " + err.message;
       }
     } else {
+      $("member-race-name").textContent = "No race selected";
+      $("member-race-release").textContent = "No registered race entries yet";
+      for (const id of ["member-arrived","member-transit","member-top-speed","member-participants"]) $(id).textContent = "—";
+      $("member-arrived-pct").textContent = "Eligible arrivals";
+      $("member-speed-unit").textContent = "Observed · provisional";
       $("arrival-order").replaceChildren();
       $("speed-ranking").replaceChildren();
       $("standings-status").textContent = "No race entries yet.";
