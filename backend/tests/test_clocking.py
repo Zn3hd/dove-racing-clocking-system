@@ -46,7 +46,7 @@ def test_gateway_rejects_blank_ring_uid_before_database_access():
     from app.routers.device_gateway import GatewayArrival
     from uuid import uuid4
     base = {"message_id": uuid4(), "race_id": uuid4()}
-    for uid in ["", "   ", "\\t"]:
+    for uid in ["", "   ", "\t"]:
         try:
             GatewayArrival(**base, ring_uid=uid)
         except ValidationError:
