@@ -9,6 +9,14 @@
       <section class="operation-card"><h2>Create a race</h2><form id="ops-race-create"><label>Race name<input name="name" required maxlength="200"></label><div class="form-grid"><label>Release latitude<input name="release_latitude" type="number" step="any" min="-90" max="90" required></label><label>Release longitude<input name="release_longitude" type="number" step="any" min="-180" max="180" required></label></div><div class="form-grid"><label>Minimum m/min<input name="minimum_speed_mpm" type="number" step="any" min="0" value="500" required></label><label>Maximum m/min<input name="maximum_speed_mpm" type="number" step="any" min="1" value="3000" required></label></div><label>Ranking<select name="guest_ranking_mode"><option value="separate">Separate guest/member</option><option value="combined">Combined provisional</option></select></label><button class="primary" type="submit">Create draft race</button></form></section>
     </div>
     <section class="operation-card"><h2>Race registration and release</h2><label>Selected race<select id="ops-race"></select></label><p id="ops-race-status" class="muted"></p><div class="location-tools"><button id="ops-open" class="outline" type="button">Open registration</button><button id="ops-release" class="primary" type="button">Record release now</button><button id="ops-close" class="outline" type="button">Close race</button></div><p class="field-help">Release uses server time. Closing stops new arrivals; exact received-submission recovery remains available.</p><form id="ops-entry"><div class="form-grid"><label>Pigeon<select name="pigeon_id" required></select></label><label>Clocking method<select name="expected_method"><option value="QR">Guest QR</option><option value="RFID">Member RFID</option></select></label></div><button class="primary" type="submit">Register entry</button></form><ul id="ops-entries"></ul></section>
+    <section class="operation-card" id="ops-simulator-panel">
+      <h2>Simulate RFID arrival — TEST ONLY</h2>
+      <p class="field-help">Requires an active race, a registered RFID pigeon and an active simulator reader assigned to the same loft. Simulated evidence is pending review, not official.</p>
+      <form id="ops-simulate"><label>Simulator reader<select name="device_id" required></select></label>
+      <label>Registered ring<select name="rfid_uid" required></select></label>
+      <button type="submit" class="outline">Submit simulated arrival</button></form>
+      <p id="ops-simulate-result" role="status" class="field-help"></p>
+    </section>
     <div class="operations-grid">
       <section class="operation-card"><h2>Private QR labels</h2><form id="ops-qr"><label>Guest entry<select name="entry_id" required></select></label><label>Validity in minutes<input name="expires_in_minutes" type="number" min="1" max="1440" value="120" required></label><p class="field-help">Issuing a new label revokes earlier labels for that entry. Share privately. Codes are generated here without a third-party QR service.</p><button class="primary" type="submit">Issue / rotate QR label</button></form><div id="ops-tokens"></div></section>
       <section class="operation-card"><h2>Arrival evidence review</h2><label>Event<select id="ops-event"></select></label><p id="ops-event-detail" class="field-help"></p><form id="ops-review"><label>Decision<select name="decision"><option value="approve">Approve provisional evidence</option><option value="reject">Reject evidence</option></select></label><label>Review reason<textarea name="reason" minlength="8" required rows="2"></textarea></label><button class="primary" type="submit">Record review</button></form><details><summary>Independent physical guest verification</summary><form id="ops-physical"><label>Decision<select name="decision"><option value="confirmed">Confirmed in person</option><option value="rejected">Rejected</option></select></label><label>Observed ring number<input name="ring_number_seen" required maxlength="200"></label><label>Physical evidence note<textarea name="evidence_note" minlength="12" required rows="2"></textarea></label><p class="field-help">Record only a verification you actually performed. This does not certify clock integrity or create official results.</p><button class="outline" type="submit">Record physical verification</button></form></details></section>
@@ -46,6 +54,7 @@
       data.race = races.some(r => r.id === data.race) ? data.race : races[0]?.id || '';
       get('ops-race').value = data.race;
       await loadRace();
+      await loadSimulatorOptions();
     } catch (error) { if (error.name !== 'AbortError') message(error.message, true); }
     finally { get('ops-refresh').disabled = false; }
   }
@@ -54,6 +63,7 @@
     const selected = data.races.find(r => r.id === race);
     get('ops-race-status').textContent = selected ? `Status: ${selected.status} · ${selected.minimum_speed_mpm}–${selected.maximum_speed_mpm} m/min` : 'No race selected';
     syncControls();
+    get('ops-simulate').querySelector('button[type=submit]').disabled = selected?.status !== 'active';
     data.entries = []; data.events = [];
     get('ops-entries').replaceChildren(); get('ops-tokens').replaceChildren();
     options(get('ops-qr').elements.entry_id, [], e => e.id, e => e.id);
@@ -78,6 +88,27 @@
         get('ops-tokens').append(row);
       }
     } catch (error) { if (error.name !== 'AbortError') message(error.message, true); }
+  }
+  async function loadSimulatorOptions() {
+    const form = get('ops-simulate');
+    const button = form.querySelector('button[type=submit]');
+    const race = data.race;
+    button.disabled = true;
+    if (!race) return;
+    const result = await api('/clocking/rfid/simulator-options?race_id=' + encodeURIComponent(race));
+    if (race !== data.race) return;
+    options(form.elements.device_id, result.devices, d => d.id, d => d.device_identifier);
+    const chooseRings = () => {
+      const device = result.devices.find(d => d.id === form.elements.device_id.value);
+      const rings = result.rings.filter(r => device && r.loft_id === device.loft_id);
+      options(form.elements.rfid_uid, rings, r => r.uid, r => r.official_ring_number + ' — ' + r.uid);
+      button.disabled = data.races.find(r => r.id === race)?.status !== 'active' || !rings.length;
+    };
+    form.elements.device_id.onchange = chooseRings;
+    chooseRings();
+    get('ops-simulate-result').textContent = result.devices.length ?
+      'Select a test reader and ring from the same loft.' :
+      'No active simulator reader for these entries. Register a simulator reader in Reader setup first.';
   }
   function eventDetails() {
     const event = data.events.find(e => e.id === get('ops-event').value);
@@ -125,12 +156,22 @@
     get('ops-label-expiry').textContent = `Expires ${new Date(result.expires_at).toLocaleString()}. Earlier labels were revoked.`;
     get('ops-label').showModal(); await loadRace();
   });
+  form('ops-simulate', async value => {
+    if (data.races.find(r => r.id === data.race)?.status !== 'active') throw new Error('Only active races accept simulated arrivals.');
+    if (!window.confirm('Create a TEST ONLY simulated arrival? This will not count as trusted hardware evidence or an official result.')) return;
+    const result = await post('/clocking/rfid/simulate', {
+      race_id: data.race, device_id: value.device_id,
+      rfid_uid: value.rfid_uid, idempotency_key: crypto.randomUUID()
+    });
+    get('ops-simulate-result').textContent = 'Simulated evidence received: ' + result.event_id + ' (pending review; NOT official).';
+    await loadRace();
+  });
   form('ops-review', async value => { if (!get('ops-event').value) throw new Error('Select an event.'); await post(`/clocking/events/${get('ops-event').value}/review`, value); await loadRace(); });
   form('ops-physical', async value => { if (!get('ops-event').value) throw new Error('Select an event.'); await post(`/clocking/events/${get('ops-event').value}/guest-verification`, value); await loadRace(); });
   for (const [button, suffix] of [['ops-open','open'],['ops-release','activate'],['ops-close','close']]) {
     get(button).addEventListener('click', () => perform(get(button), async () => { await post(`/races/${data.race}/${suffix}`, {}); await load(); }));
   }
-  get('ops-race').addEventListener('change', () => { data.race=get('ops-race').value; data.version++; closeLabel(); loadRace(); });
+  get('ops-race').addEventListener('change', async () => { data.race=get('ops-race').value; data.version++; closeLabel(); await loadRace(); await loadSimulatorOptions(); });
   get('ops-refresh').addEventListener('click', load);
   get('ops-event').addEventListener('change', eventDetails);
   get('ops-label-close').addEventListener('click', closeLabel);

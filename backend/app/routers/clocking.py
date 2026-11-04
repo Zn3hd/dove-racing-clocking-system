@@ -259,6 +259,25 @@ def revoke_qr_token(token_id: UUID, actor: dict = Depends(require_admin), db: Se
     return {'token_id':token_id,'revoked':True}
 
 
+@router.get("/rfid/simulator-options")
+def simulator_options(race_id: UUID, actor: dict = Depends(require_race_admin),
+                      db: Session = Depends(get_db)):
+    """Admin-only eligible test rings and compatible simulator readers for one race."""
+    devices = db.execute(text("""SELECT DISTINCT d.id,d.device_identifier,d.loft_id
+        FROM devices d JOIN race_entries e ON e.loft_id=d.loft_id
+        JOIN races r ON r.id=e.race_id
+        WHERE e.race_id=:race AND e.status='registered' AND e.expected_method='RFID'
+          AND d.status='active' AND d.reader_adapter='simulator'"""),
+        {"race":race_id}).mappings().all()
+    rings = db.execute(text("""SELECT DISTINCT e.pigeon_id,p.official_ring_number,ring.uid,
+        e.loft_id FROM race_entries e
+        JOIN pigeons p ON p.id=e.pigeon_id
+        JOIN rfid_rings ring ON ring.pigeon_id=p.id AND ring.revoked_at IS NULL
+        WHERE e.race_id=:race AND e.status='registered' AND e.expected_method='RFID'
+        ORDER BY p.official_ring_number,ring.uid"""), {"race":race_id}).mappings().all()
+    return {"devices":[dict(d) for d in devices], "rings":[dict(r) for r in rings]}
+
+
 @router.post("/rfid/simulate", status_code=202)
 def simulate_rfid(payload: RFIDSimulatorRequest, actor: dict = Depends(require_admin),
                   db: Session = Depends(get_db)):
