@@ -36,6 +36,20 @@ class GatewayArrival(BaseModel):
     capture_mode: Literal['automatic','operator','simulated'] | None = None
     original_scan: str | None = Field(default=None, min_length=1, max_length=1024)
 
+    @field_validator('ring_uid')
+    @classmethod
+    def nonblank_ring_uid(cls, value):
+        if not value.strip():
+            raise ValueError('Ring UID must not be blank')
+        return value.strip()
+
+    @field_validator('protocol', 'original_scan')
+    @classmethod
+    def nonblank_optional_evidence(cls, value):
+        if value is not None and not value.strip():
+            raise ValueError('Provided reader evidence must not be blank')
+        return value
+
     @field_validator('device_recorded_at')
     @classmethod
     def aware_timestamp(cls, value):
