@@ -293,3 +293,69 @@ def test_authorization_failure_pauses_device_queue_without_losing_scans(tmp_path
         assert all(row["payload"] for row in queue.due(cfg, now + 300))
     finally:
         queue.close()
+
+
+def test_lost_acknowledgement_retries_same_scan_and_persists_server_receipt(tmp_path):
+    cfg = config(tmp_path)
+    queue = Queue(cfg.queue_path)
+    original_id = queue.enqueue(cfg, Reading("00001234", datetime.now(timezone.utc)))
+    requests = []
+    backend_event_id = str(uuid4())
+
+    def backend(request):
+        payload = json.loads(request.content)
+        requests.append(payload)
+        assert payload["message_id"] == original_id
+        assert payload["ring_uid"] == "00001234"
+        if len(requests) == 1:
+            # Server accepted the event, but the response was lost in transit.
+            raise httpx.ReadError("Acknowledgement lost", request=request)
+        return httpx.Response(202, json={
+            "event_id": backend_event_id, "status": "pending",
+            "official_result_created": False, "duplicate_request": True,
+        })
+
+    now = 100000000000
+    try:
+        with httpx.Client(transport=httpx.MockTransport(backend)) as client:
+            assert synchronize(queue, cfg, "test-token", client, now)["retry"] == 1
+            assert queue.counts() == {"pending": 1}
+            queue.close()
+            queue = Queue(cfg.queue_path)
+            assert synchronize(queue, cfg, "test-token", client, now + 3)["sent"] == 1
+            assert synchronize(queue, cfg, "test-token", client, now + 4)["sent"] == 0
+        assert requests[0] == requests[1]
+        stored = queue.db.execute(
+            "SELECT status, backend_event_id, payload FROM events WHERE id=?",
+            (original_id,),
+        ).fetchone()
+        assert stored["status"] == "sent"
+        assert stored["backend_event_id"] == backend_event_id
+        assert json.loads(stored["payload"]) == requests[0]
+        queue.close()
+        queue = Queue(cfg.queue_path)
+        assert queue.due(cfg, now + 1000) == []
+        assert queue.counts() == {"sent": 1}
+    finally:
+        queue.close()
+
+
+def test_invalid_acknowledgement_never_marks_scan_sent(tmp_path):
+    cfg = config(tmp_path)
+    queue = Queue(cfg.queue_path)
+    scan_id = queue.enqueue(cfg, Reading("0001", datetime.now(timezone.utc)))
+    try:
+        def invalid(request):
+            return httpx.Response(202, json={
+                "event_id": str(uuid4()), "status": "pending",
+                "official_result_created": True,
+            })
+        with httpx.Client(transport=httpx.MockTransport(invalid)) as client:
+            assert synchronize(queue, cfg, "test-token", client, 100000000000)["retry"] == 1
+        stored = queue.db.execute(
+            "SELECT status, backend_event_id FROM events WHERE id=?", (scan_id,),
+        ).fetchone()
+        assert stored["status"] == "pending"
+        assert stored["backend_event_id"] is None
+    finally:
+        queue.close()
