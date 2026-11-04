@@ -138,6 +138,10 @@ def preview_leaderboard(race_id: UUID, db: Session = Depends(get_db),
               SELECT 1 FROM clocking_reviews cr
               WHERE cr.event_id=c.id AND cr.decision='approve'
           )
+          AND NOT EXISTS (
+              SELECT 1 FROM clocking_reviews cr
+              WHERE cr.event_id=c.id AND cr.decision='reject'
+          )
           AND c.recorded_at > :released
         ORDER BY e.id,c.recorded_at ASC,c.id ASC
     """), {"race":race_id,"released":race["actual_release_at"]}).mappings().all()
