@@ -206,3 +206,156 @@ def test_rate_limit_pauses_entire_reader_scope(tmp_path):
         assert len(queue.due(cfg,100000000060)) == 2
     finally:
         queue.close()
+
+
+@pytest.mark.parametrize("frame,error", [
+    (b"A" * 1024 + b"\n", "Oversized serial frame"),
+    (b"A" * 1025 + b"\n", "Oversized serial frame"),
+    (b"RING-\xff\n", "ascii"),
+])
+def test_serial_reader_rejects_oversized_and_nonascii_frames(monkeypatch, frame, error):
+    import sys
+    from types import SimpleNamespace
+    chunks = iter(bytes([byte]) for byte in frame)
+    closed = []
+    class Port:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            closed.append(True)
+        def read(self, count):
+            assert count == 1
+            return next(chunks)
+    monkeypatch.setitem(sys.modules, "serial", SimpleNamespace(Serial=lambda *a, **kw: Port()))
+    with pytest.raises((ValueError, UnicodeDecodeError), match=error):
+        list(SerialLines("test-port", 9600).readings())
+    assert closed == [True]
+
+
+def test_serial_reader_accepts_maximum_complete_frame_and_closes(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    frame = b"A" * 1023 + b"\n"
+    chunks = iter(bytes([byte]) for byte in frame)
+    closed = []
+    class Port:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            closed.append(True)
+        def read(self, count):
+            return next(chunks)
+    monkeypatch.setitem(sys.modules, "serial", SimpleNamespace(Serial=lambda *a, **kw: Port()))
+    stream = SerialLines("test-port", 9600).readings()
+    assert next(stream).tag == frame.decode("ascii")
+    stream.close()
+    assert closed == [True]
+
+
+def test_serial_disconnect_propagates_and_closes(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    closed = []
+    class Port:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            closed.append(True)
+        def read(self, count):
+            raise OSError("Reader disconnected")
+    monkeypatch.setitem(sys.modules, "serial", SimpleNamespace(Serial=lambda *a, **kw: Port()))
+    with pytest.raises(OSError, match="Reader disconnected"):
+        next(SerialLines("test-port", 9600).readings())
+    assert closed == [True]
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_authorization_failure_pauses_device_queue_without_losing_scans(tmp_path, status):
+    cfg = config(tmp_path)
+    queue = Queue(cfg.queue_path)
+    try:
+        first = queue.enqueue(cfg, Reading("0001", datetime.now(timezone.utc)))
+        second = queue.enqueue(cfg, Reading("0002", datetime.now(timezone.utc)))
+        calls = []
+        def denied(request):
+            calls.append(request)
+            return httpx.Response(status)
+        now = 100000000000
+        with httpx.Client(transport=httpx.MockTransport(denied)) as client:
+            assert synchronize(queue, cfg, "test-token", client, now)["auth_blocked"] is True
+            assert synchronize(queue, cfg, "test-token", client, now + 60)["auth_blocked"] is False
+        assert len(calls) == 1
+        assert queue.counts() == {"pending": 2}
+        assert queue.due(cfg, now + 299) == []
+        queue.close()
+        queue = Queue(cfg.queue_path)
+        assert {row["id"] for row in queue.due(cfg, now + 300)} == {first, second}
+        assert all(row["payload"] for row in queue.due(cfg, now + 300))
+    finally:
+        queue.close()
+
+
+def test_lost_acknowledgement_retries_same_scan_and_persists_server_receipt(tmp_path):
+    cfg = config(tmp_path)
+    queue = Queue(cfg.queue_path)
+    original_id = queue.enqueue(cfg, Reading("00001234", datetime.now(timezone.utc)))
+    requests = []
+    backend_event_id = str(uuid4())
+
+    def backend(request):
+        payload = json.loads(request.content)
+        requests.append(payload)
+        assert payload["message_id"] == original_id
+        assert payload["ring_uid"] == "00001234"
+        if len(requests) == 1:
+            # Server accepted the event, but the response was lost in transit.
+            raise httpx.ReadError("Acknowledgement lost", request=request)
+        return httpx.Response(202, json={
+            "event_id": backend_event_id, "status": "pending",
+            "official_result_created": False, "duplicate_request": True,
+        })
+
+    now = 100000000000
+    try:
+        with httpx.Client(transport=httpx.MockTransport(backend)) as client:
+            assert synchronize(queue, cfg, "test-token", client, now)["retry"] == 1
+            assert queue.counts() == {"pending": 1}
+            queue.close()
+            queue = Queue(cfg.queue_path)
+            assert synchronize(queue, cfg, "test-token", client, now + 3)["sent"] == 1
+            assert synchronize(queue, cfg, "test-token", client, now + 4)["sent"] == 0
+        assert requests[0] == requests[1]
+        stored = queue.db.execute(
+            "SELECT status, backend_event_id, payload FROM events WHERE id=?",
+            (original_id,),
+        ).fetchone()
+        assert stored["status"] == "sent"
+        assert stored["backend_event_id"] == backend_event_id
+        assert json.loads(stored["payload"]) == requests[0]
+        queue.close()
+        queue = Queue(cfg.queue_path)
+        assert queue.due(cfg, now + 1000) == []
+        assert queue.counts() == {"sent": 1}
+    finally:
+        queue.close()
+
+
+def test_invalid_acknowledgement_never_marks_scan_sent(tmp_path):
+    cfg = config(tmp_path)
+    queue = Queue(cfg.queue_path)
+    scan_id = queue.enqueue(cfg, Reading("0001", datetime.now(timezone.utc)))
+    try:
+        def invalid(request):
+            return httpx.Response(202, json={
+                "event_id": str(uuid4()), "status": "pending",
+                "official_result_created": True,
+            })
+        with httpx.Client(transport=httpx.MockTransport(invalid)) as client:
+            assert synchronize(queue, cfg, "test-token", client, 100000000000)["retry"] == 1
+        stored = queue.db.execute(
+            "SELECT status, backend_event_id FROM events WHERE id=?", (scan_id,),
+        ).fetchone()
+        assert stored["status"] == "pending"
+        assert stored["backend_event_id"] is None
+    finally:
+        queue.close()

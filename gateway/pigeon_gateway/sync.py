@@ -51,6 +51,7 @@ def synchronize(queue: Queue, config: Config, token: str, client: httpx.Client, 
             continue
         if response.status_code in (401, 403):
             queue.retry(row, f"Authorization blocked (HTTP {response.status_code})", now)
+            queue.pause(config, now + 300)
             result["auth_blocked"] = True
             break
         if response.status_code == 429:
