@@ -548,3 +548,56 @@ $("#verify-location").addEventListener("click", async () => {
     $("#location-dialog").removeEventListener("cancel", stopCancel);
   }
 });
+
+async function loadMembershipApplications() {
+  const list = $("#applications-list");
+  list.replaceChildren(element("p", "muted", "Loading pending applications…"));
+  if (!state.club) {
+    list.replaceChildren(element("p", "muted", "Create or select a club first."));
+    return;
+  }
+  try {
+    const applications = await api("/membership/applications?club_id=" +
+      encodeURIComponent(state.club.id));
+    list.replaceChildren();
+    if (!applications.length) {
+      list.append(element("p", "muted", "No pending membership applications."));
+      return;
+    }
+    for (const application of applications) {
+      const card = element("article", "panel");
+      card.append(element("h3", "", application.full_name),
+        element("p", "", application.email),
+        element("p", "muted", application.phone || "No phone provided"));
+      const reason = document.createElement("input");
+      reason.placeholder = "Optional decision reason";
+      reason.maxLength = 500;
+      reason.setAttribute("aria-label", "Decision reason for " + application.full_name);
+      card.append(reason);
+      for (const decision of ["approve", "decline"]) {
+        const button = element("button", "outline small", decision === "approve" ? "Approve" : "Decline");
+        button.type = "button";
+        button.addEventListener("click", async () => {
+          if (!confirm((decision === "approve" ? "Approve " : "Decline ") + application.full_name + "?")) return;
+          button.disabled = true;
+          try {
+            await post("/membership/applications/" + application.id + "/decision", {
+              decision, reason: reason.value.trim() || null
+            });
+            message("Application " + (decision === "approve" ? "approved" : "declined") + ".");
+            await loadMembershipApplications();
+            await loadClub();
+          } catch (error) {
+            message(error.message, true);
+            button.disabled = false;
+          }
+        });
+        card.append(button, document.createTextNode(" "));
+      }
+      list.append(card);
+    }
+  } catch (error) {
+    list.replaceChildren(element("p", "error", error.message));
+  }
+}
+$("#applications-refresh").addEventListener("click", loadMembershipApplications);
