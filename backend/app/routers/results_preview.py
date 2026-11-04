@@ -33,7 +33,7 @@ def live_race(race_id: UUID, db: Session = Depends(get_db),
     if race['actual_release_at'] is not None:
         events = db.execute(text('''SELECT DISTINCT ON (e.id)
             e.id AS entry_id,e.pigeon_id,e.loft_id,e.distance_meters,e.expected_method AS clocking_method,
-            p.official_ring_number,u.full_name AS owner_name,c.id AS event_id,c.recorded_at AS arrival_at,
+            p.official_ring_number,l.name AS loft_name,u.full_name AS owner_name,c.id AS event_id,c.recorded_at AS arrival_at,
             c.device_id,c.metadata,gv.decision AS physical_verification,
             v.warnings AS validation_warnings,v.is_simulated,
             EXISTS(SELECT 1 FROM clocking_reviews cr WHERE cr.event_id=c.id AND cr.decision='approve') AS reviewed
@@ -53,7 +53,7 @@ def live_race(race_id: UUID, db: Session = Depends(get_db),
             velocity = speed_mpm(float(event['distance_meters']), race['actual_release_at'], event['arrival_at'])
             metadata = event['metadata'] or {}
             rows.append({key: event[key] for key in ('entry_id','pigeon_id','loft_id','clocking_method',
-                'official_ring_number','owner_name','event_id','arrival_at','device_id','reviewed')})
+                'official_ring_number','loft_name','owner_name','event_id','arrival_at','device_id','reviewed')})
             rows[-1].update({
                 'distance_meters': float(event['distance_meters']), 'speed_mpm': velocity,
                 'display_speed': round(convert_speed(velocity, race['display_speed_unit']), 4),
