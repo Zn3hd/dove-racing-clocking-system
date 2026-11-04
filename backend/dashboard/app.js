@@ -371,6 +371,13 @@ function resetLive(text) {
   $("#validation-empty").textContent = "No validation data loaded.";
   $("#live-state").textContent = text;
   $("#live-state").hidden = false;
+  $("#race-hero-title").textContent = "Select a race to begin";
+  $("#race-hero-subtitle").textContent = "Waiting for race details";
+  $("#race-in-transit").textContent = "—";
+  $("#race-arrived-percent").textContent = "Eligible arrivals";
+  $("#race-top-speed").textContent = "—";
+  $("#race-speed-unit").textContent = "Observed · provisional";
+  $("#race-participants").textContent = "—";
   $("#live-total").textContent = "-";
   $("#live-arrived").textContent = "-";
   $("#live-status").textContent = "-";
@@ -412,6 +419,19 @@ async function loadRaces() {
 }
 
 function renderLive(data) {
+  const raceLabel = $("#live-race").selectedOptions[0]?.textContent || data.race_name || "Selected race";
+  $("#race-hero-title").textContent = data.race_name || raceLabel;
+  $("#race-hero-subtitle").textContent = data.release_at
+    ? "Released " + new Date(data.release_at).toLocaleString() + " · " + (data.official ? "Official" : "Provisional clocking")
+    : "Not released · waiting for eligible arrivals";
+  const remaining = Math.max(0, Number(data.registered_entries) - Number(data.arrived_entries));
+  const percentage = data.registered_entries ? 100 * data.arrived_entries / data.registered_entries : 0;
+  $("#race-in-transit").textContent = String(remaining);
+  $("#race-arrived-percent").textContent = percentage.toFixed(1) + "% of registered pigeons";
+  const observed = data.entries.map(row => Number(row.display_speed)).filter(Number.isFinite);
+  $("#race-top-speed").textContent = observed.length ? Math.max(...observed).toLocaleString(undefined, {maximumFractionDigits: 2}) : "—";
+  $("#race-speed-unit").textContent = (data.speed_unit || "m/min") + " · observed, provisional";
+  $("#race-participants").textContent = data.active_participants == null ? "—" : String(data.active_participants);
   renderInsights(data);
   $("#validation-summary").textContent = `${data.suspicious_events} flagged · ${data.repeat_scans} repeat scans · ${data.simulated_events} simulated · Maximum ${data.maximum_speed_mpm} m/min`;
   const flaggedBody = $("#validation-rows");
