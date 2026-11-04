@@ -426,7 +426,17 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
             action('Create draft race', Icons.flag_outlined, ManagementKind.race),
             section('Races', races,
               (item) => item['name']?.toString() ?? 'Unnamed race',
-              (item) => item['status']?.toString() ?? '',
+              (item) {
+                final status = item['status']?.toString() ?? 'unknown';
+                final min = item['minimum_speed_mpm'];
+                final max = item['maximum_speed_mpm'];
+                final unit = item['display_speed_unit']?.toString();
+                final guest = item['guest_ranking_mode']?.toString();
+                if (min == null || max == null) return 'Status: $status';
+                return 'Status: $status • Speed: $min–$max m/min'
+                    '${unit == null ? '' : ' • Display: $unit'}'
+                    '${guest == null ? '' : ' • Guests: $guest'}';
+              },
               editableRaces: true),
             const SizedBox(height: 24),
             Text(isWebPreview
