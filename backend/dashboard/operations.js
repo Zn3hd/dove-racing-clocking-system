@@ -82,14 +82,25 @@
     } catch (error) { if (error.name !== 'AbortError') message(error.message, true); }
   }
   async function loadSimulatorOptions() {
-    const [devices, rings] = await Promise.all([api('/devices'), api('/pigeons')]);
-    const simulatorDevices = devices.filter(d => d.status === 'active' && d.reader_adapter === 'simulator');
-    options(get('ops-simulate').elements.device_id, simulatorDevices, d => d.id, d => d.device_identifier);
-    const eligible = rings.filter(p => data.entries.some(e => e.pigeon_id === p.id && e.expected_method === 'RFID') && p.rfid_uid);
-    options(get('ops-simulate').elements.rfid_uid, eligible, p => p.rfid_uid, p => p.official_ring_number + ' — ' + p.rfid_uid);
-    get('ops-simulate-result').textContent = simulatorDevices.length ?
-      'Choose a simulator reader belonging to the selected pigeon’s loft.' :
-      'No simulator reader registered. Create one in Reader setup for the pigeon’s loft first.';
+    const form = get('ops-simulate');
+    const button = form.querySelector('button[type=submit]');
+    const race = data.race;
+    button.disabled = true;
+    if (!race) return;
+    const result = await api('/clocking/rfid/simulator-options?race_id=' + encodeURIComponent(race));
+    if (race !== data.race) return;
+    options(form.elements.device_id, result.devices, d => d.id, d => d.device_identifier);
+    const chooseRings = () => {
+      const device = result.devices.find(d => d.id === form.elements.device_id.value);
+      const rings = result.rings.filter(r => device && r.loft_id === device.loft_id);
+      options(form.elements.rfid_uid, rings, r => r.uid, r => r.official_ring_number + ' — ' + r.uid);
+      button.disabled = data.races.find(r => r.id === race)?.status !== 'active' || !rings.length;
+    };
+    form.elements.device_id.onchange = chooseRings;
+    chooseRings();
+    get('ops-simulate-result').textContent = result.devices.length ?
+      'Select a test reader and ring from the same loft.' :
+      'No active simulator reader for these entries. Register a simulator reader in Reader setup first.';
   }
   function eventDetails() {
     const event = data.events.find(e => e.id === get('ops-event').value);
