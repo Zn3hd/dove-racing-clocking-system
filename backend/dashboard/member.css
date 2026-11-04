@@ -37,3 +37,43 @@ select{width:100%;max-width:440px;padding:12px 14px;border:1px solid #ddd7e9;bor
 .leader-detail small{color:#81798d;font-size:11px}.leader-detail strong{font-size:12px;overflow-wrap:anywhere;font-weight:600}
 .empty-board{padding:20px;margin:0;font-size:12px}
 @media(max-width:560px){header{padding:20px;border-radius:15px}.leaderboard-panel{padding:16px}.leader-metrics{gap:7px}.leader-metrics article{padding:11px}.leader-metrics span{font-size:10px}.leader-main{gap:9px;padding:12px 10px}.leader-position{flex-basis:31px;height:31px}.leader-speed strong{font-size:14px}.leader-heading{align-items:flex-start;flex-direction:column;gap:3px}}
+
+
+/* Pastel mobile race center; preserves member authentication and provisional results. */
+:root{--blue:#326dd1;--line:#e1e9f6;color:#122447;background:#f5f7ff}
+body{color:#122447;background:linear-gradient(145deg,#fff9fb 0%,#f2f3ff 47%,#eaf8fc 100%) fixed}
+.shell{max-width:1180px;padding-top:16px}
+header{background:rgba(255,255,255,.8);border:1px solid #e7ecf8;border-radius:19px;color:#122447;padding:18px 22px;margin-bottom:18px;box-shadow:0 8px 26px #304a8210}
+.member-brand{display:flex;align-items:center;gap:12px}.member-brand strong{font-size:18px;display:block;letter-spacing:-.04em}.member-brand small{display:block;color:#6e7c98;font-size:11px}
+.member-brand-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:#e3efff;color:#326dd1;font-size:27px}
+.member-heading{margin:14px 2px 19px}.member-heading h1{font-size:clamp(1.55rem,3vw,2.2rem);letter-spacing:-.045em;color:#102449}.member-heading .eyebrow{color:#4279ca;font-size:10px}.member-heading .muted{margin:6px 0}
+header .muted{color:#60718d}#signout{background:#edf3ff;color:#254d90;border:1px solid #dce8fa}
+button{background:#326dd1}button:focus-visible,input:focus-visible,select:focus-visible{outline-color:#91b9ff}
+.panel{border:1px solid #e4eaf5;border-radius:19px;background:rgba(255,255,255,.95);box-shadow:0 8px 26px #304a8210}
+.member-race-hero{padding:22px 24px;border-radius:20px;background:linear-gradient(110deg,#edf5ff 0%,#f6efff 60%,#dff2ff 100%);border:1px solid #e1e7f8;margin-bottom:14px}
+.member-race-hero h2{font-size:clamp(1.35rem,3vw,1.8rem);letter-spacing:-.035em;margin:11px 0 6px;color:#122447}
+.member-race-hero p{font-size:12px;color:#607392;margin:0}
+.member-live-pill{color:#15775f;font-size:10px;font-weight:800;letter-spacing:.08em}
+.member-race-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:17px}
+.member-race-kpis article{min-width:0;background:rgba(255,255,255,.94);border:1px solid #e4eaf5;border-radius:18px;padding:17px;box-shadow:0 8px 26px #304a8210}
+.member-race-kpis span{display:block;font-size:12px;color:#5f708e;margin-bottom:8px}
+.member-race-kpis strong{display:block;color:#2464c7;font-size:clamp(1.4rem,2.6vw,2rem);letter-spacing:-.04em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.member-race-kpis small{display:block;color:#75839a;font-size:10px;margin-top:6px}
+.stats .panel:before{background:#a9c7f8}.stats strong{color:#193f83}
+.section-title .eyebrow{color:#4279ca}.provisional-tag{background:#e8f0ff;color:#3166ba}
+.leader-metrics article{background:#f7faff;border-color:#e4eaf5}.leader-list{border-color:#e4eaf5}
+.leader-main{color:#15284d}.leader-main:hover,.leader-main[aria-expanded=true]{background:#f3f7ff}
+.leader-position{background:#e7f0ff;color:#326dd1}.leader-details{background:#f6f9ff;border-color:#e4eaf5}
+.leader-speed strong{color:#2464c7}
+@media(max-width:760px){.member-race-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){
+.shell{padding:12px 12px 85px}
+header{padding:13px 15px;border-radius:17px}
+.member-heading{margin:17px 3px}
+.member-race-hero{padding:19px 17px}
+.member-race-kpis{gap:9px}
+.member-race-kpis article{padding:14px 12px}
+.member-race-kpis strong{font-size:1.55rem}
+.leader-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+.leader-metrics article:last-child{grid-column:span 2}
+}
