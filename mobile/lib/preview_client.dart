@@ -17,7 +17,10 @@ http.Client previewClient() {
   ];
   final races = <Map<String, dynamic>>[
     {'id': 'demo-race', 'club_id': demoClubId,
-     'name': 'Demo Draft Race', 'status': 'draft'},
+     'name': 'Demo Draft Race', 'status': 'draft',
+     'release_latitude': 14.5, 'release_longitude': 121.0,
+     'minimum_speed_mpm': 500, 'maximum_speed_mpm': 3000,
+     'display_speed_unit': 'm/min', 'guest_ranking_mode': 'separate'},
   ];
   final lofts = <Map<String, dynamic>>[
     {'id': 'demo-loft', 'club_id': demoClubId, 'name': 'Demo Loft',
@@ -59,6 +62,45 @@ http.Client previewClient() {
         _ => null,
       };
       return data == null ? bad('Not found', 404) : response(data);
+    }
+    if (request.method == 'PATCH' && path.startsWith('/races/')) {
+      final id = Uri.decodeComponent(path.substring('/races/'.length));
+      final index = races.indexWhere((e) => e['id'] == id &&
+          e['club_id'] == demoClubId && e['status'] == 'draft');
+      if (index < 0) return bad('Draft race not found', 404);
+      Map<String, dynamic> body;
+      try {
+        final decoded = jsonDecode(request.body);
+        if (decoded is! Map<String, dynamic>) return bad('Invalid request');
+        body = decoded;
+      } catch (_) { return bad('Invalid JSON'); }
+      const allowed = {'name', 'release_latitude', 'release_longitude',
+        'minimum_speed_mpm', 'maximum_speed_mpm', 'display_speed_unit',
+        'guest_ranking_mode'};
+      if (body.keys.any((key) => !allowed.contains(key))) {
+        return bad('Only draft settings may be edited');
+      }
+      final name = string(body, 'name');
+      final lat = body['release_latitude'];
+      final lng = body['release_longitude'];
+      final min = body['minimum_speed_mpm'];
+      final max = body['maximum_speed_mpm'];
+      if (name == null || name.isEmpty ||
+          lat is! num || !lat.isFinite || lat < -90 || lat > 90 ||
+          lng is! num || !lng.isFinite || lng < -180 || lng > 180 ||
+          min is! num || !min.isFinite || min <= 0 ||
+          max is! num || !max.isFinite || max <= min ||
+          !['m/min', 'm/s', 'km/h'].contains(body['display_speed_unit']) ||
+          !['separate', 'combined'].contains(body['guest_ranking_mode'])) {
+        return bad('Check the draft race settings');
+      }
+      if (races.any((race) => race['id'] != id &&
+          race['club_id'] == demoClubId &&
+          race['name'].toString().toLowerCase() == name.toLowerCase())) {
+        return bad('A demo race with this name already exists', 409);
+      }
+      races[index] = {...races[index], ...body};
+      return response(races[index]);
     }
     if (request.method == 'PATCH' && path.startsWith('/pigeons/')) {
       final id = Uri.decodeComponent(path.substring('/pigeons/'.length));
@@ -182,6 +224,10 @@ http.Client previewClient() {
         !['m/min', 'm/s', 'km/h'].contains(body['display_speed_unit']) ||
         !['separate', 'combined'].contains(body['guest_ranking_mode'])) {
       return bad('Check the draft race settings');
+    }
+    if (races.any((race) => race['club_id'] == demoClubId &&
+        race['name'].toString().toLowerCase() == name.toLowerCase())) {
+      return bad('A demo race with this name already exists', 409);
     }
     final record = <String, dynamic>{
       'id': 'demo-race-${++sequence}', 'club_id': demoClubId,

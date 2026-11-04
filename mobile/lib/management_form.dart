@@ -95,7 +95,9 @@ class _ManagementFormState extends State<ManagementForm> {
         case ManagementKind.race:
           final min = double.parse(value('minimum_speed_mpm'));
           final max = double.parse(value('maximum_speed_mpm'));
-          if (max <= min) throw ApiException('Maximum speed must exceed minimum speed.');
+          if (min <= 0 || max <= min) {
+            throw ApiException('Minimum speed must be positive and maximum must exceed minimum.');
+          }
           await widget.api.createRace(widget.token, {
             'club_id': widget.clubId, 'name': value('name'),
             'release_latitude': double.parse(value('release_latitude')),

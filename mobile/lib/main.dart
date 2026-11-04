@@ -5,6 +5,7 @@ import 'session.dart';
 import 'preview_client.dart';
 import 'preview_participant_edit.dart';
 import 'preview_pigeon_edit.dart';
+import 'preview_race_edit.dart';
 
 import 'management_form.dart';
 
@@ -344,10 +345,21 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
     if (saved == true && mounted) setState(refresh);
   }
 
+  Future<void> editRace(Map<String, dynamic> race) async {
+    if (!isWebPreview || race['status'] != 'draft') return;
+    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => PreviewRaceEditPage(
+        api: widget.api, token: widget.token, race: race,
+      ),
+    ));
+    if (saved == true && mounted) setState(refresh);
+  }
+
   Widget section(String heading, List<Map<String, dynamic>> items,
       String Function(Map<String, dynamic>) title,
       String Function(Map<String, dynamic>) subtitle,
-      {bool editableParticipants = false, bool editablePigeons = false}) {
+      {bool editableParticipants = false, bool editablePigeons = false,
+      bool editableRaces = false}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const SizedBox(height: 24),
       Text('$heading (${items.length})',
@@ -358,12 +370,15 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
         ...items.map((item) => ListTile(
           title: Text(title(item)),
           subtitle: Text(subtitle(item)),
-          trailing: (editableParticipants || editablePigeons) && isWebPreview
+          trailing: (editableParticipants || editablePigeons ||
+              (editableRaces && item['status'] == 'draft')) && isWebPreview
               ? const Icon(Icons.edit_outlined) : null,
           onTap: isWebPreview && editableParticipants
               ? () => editParticipant(item)
               : isWebPreview && editablePigeons
-                  ? () => editPigeon(item) : null,
+                  ? () => editPigeon(item)
+                  : isWebPreview && editableRaces && item['status'] == 'draft'
+                      ? () => editRace(item) : null,
         )),
     ]);
   }
@@ -411,7 +426,18 @@ class _ClubDetailsPageState extends State<ClubDetailsPage> {
             action('Create draft race', Icons.flag_outlined, ManagementKind.race),
             section('Races', races,
               (item) => item['name']?.toString() ?? 'Unnamed race',
-              (item) => item['status']?.toString() ?? ''),
+              (item) {
+                final status = item['status']?.toString() ?? 'unknown';
+                final min = item['minimum_speed_mpm'];
+                final max = item['maximum_speed_mpm'];
+                final unit = item['display_speed_unit']?.toString();
+                final guest = item['guest_ranking_mode']?.toString();
+                if (min == null || max == null) return 'Status: $status';
+                return 'Status: $status • Speed: $min–$max m/min'
+                    '${unit == null ? '' : ' • Display: $unit'}'
+                    '${guest == null ? '' : ' • Guests: $guest'}';
+              },
+              editableRaces: true),
             const SizedBox(height: 24),
             Text(isWebPreview
                 ? 'Sandbox only — changes reset on reload. Official clocking is not enabled.'
