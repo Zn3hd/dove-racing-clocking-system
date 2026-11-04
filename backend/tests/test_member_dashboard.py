@@ -33,7 +33,7 @@ def test_member_overview_requires_member_role_and_scopes_private_data(scenario):
 def test_member_dashboard_static_assets_are_served_without_admin_access(scenario):
     client = scenario["client"]
     for path, expected in (
-        ("/dashboard/member.html", "Member dashboard"),
+        ("/dashboard/member.html", "Race overview"),
         ("/dashboard/member.css", ".shell"),
         ("/dashboard/member.js", "/member/overview"),
     ):
