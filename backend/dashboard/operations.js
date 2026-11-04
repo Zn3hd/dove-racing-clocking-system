@@ -46,6 +46,7 @@
       data.race = races.some(r => r.id === data.race) ? data.race : races[0]?.id || '';
       get('ops-race').value = data.race;
       await loadRace();
+      await loadSimulatorOptions();
     } catch (error) { if (error.name !== 'AbortError') message(error.message, true); }
     finally { get('ops-refresh').disabled = false; }
   }
@@ -54,6 +55,7 @@
     const selected = data.races.find(r => r.id === race);
     get('ops-race-status').textContent = selected ? `Status: ${selected.status} · ${selected.minimum_speed_mpm}–${selected.maximum_speed_mpm} m/min` : 'No race selected';
     syncControls();
+    get('ops-simulate').querySelector('button[type=submit]').disabled = selected?.status !== 'active';
     data.entries = []; data.events = [];
     get('ops-entries').replaceChildren(); get('ops-tokens').replaceChildren();
     options(get('ops-qr').elements.entry_id, [], e => e.id, e => e.id);
@@ -78,6 +80,16 @@
         get('ops-tokens').append(row);
       }
     } catch (error) { if (error.name !== 'AbortError') message(error.message, true); }
+  }
+  async function loadSimulatorOptions() {
+    const [devices, rings] = await Promise.all([api('/devices'), api('/pigeons')]);
+    const simulatorDevices = devices.filter(d => d.status === 'active' && d.reader_adapter === 'simulator');
+    options(get('ops-simulate').elements.device_id, simulatorDevices, d => d.id, d => d.device_identifier);
+    const eligible = rings.filter(p => data.entries.some(e => e.pigeon_id === p.id && e.expected_method === 'RFID') && p.rfid_uid);
+    options(get('ops-simulate').elements.rfid_uid, eligible, p => p.rfid_uid, p => p.official_ring_number + ' — ' + p.rfid_uid);
+    get('ops-simulate-result').textContent = simulatorDevices.length ?
+      'Choose a simulator reader belonging to the selected pigeon’s loft.' :
+      'No simulator reader registered. Create one in Reader setup for the pigeon’s loft first.';
   }
   function eventDetails() {
     const event = data.events.find(e => e.id === get('ops-event').value);
@@ -125,12 +137,22 @@
     get('ops-label-expiry').textContent = `Expires ${new Date(result.expires_at).toLocaleString()}. Earlier labels were revoked.`;
     get('ops-label').showModal(); await loadRace();
   });
+  form('ops-simulate', async value => {
+    if (data.races.find(r => r.id === data.race)?.status !== 'active') throw new Error('Only active races accept simulated arrivals.');
+    if (!window.confirm('Create a TEST ONLY simulated arrival? This will not count as trusted hardware evidence or an official result.')) return;
+    const result = await post('/clocking/rfid/simulate', {
+      race_id: data.race, device_id: value.device_id,
+      rfid_uid: value.rfid_uid, idempotency_key: crypto.randomUUID()
+    });
+    get('ops-simulate-result').textContent = 'Simulated evidence received: ' + result.event_id + ' (pending review; NOT official).';
+    await loadRace();
+  });
   form('ops-review', async value => { if (!get('ops-event').value) throw new Error('Select an event.'); await post(`/clocking/events/${get('ops-event').value}/review`, value); await loadRace(); });
   form('ops-physical', async value => { if (!get('ops-event').value) throw new Error('Select an event.'); await post(`/clocking/events/${get('ops-event').value}/guest-verification`, value); await loadRace(); });
   for (const [button, suffix] of [['ops-open','open'],['ops-release','activate'],['ops-close','close']]) {
     get(button).addEventListener('click', () => perform(get(button), async () => { await post(`/races/${data.race}/${suffix}`, {}); await load(); }));
   }
-  get('ops-race').addEventListener('change', () => { data.race=get('ops-race').value; data.version++; closeLabel(); loadRace(); });
+  get('ops-race').addEventListener('change', async () => { data.race=get('ops-race').value; data.version++; closeLabel(); await loadRace(); await loadSimulatorOptions(); });
   get('ops-refresh').addEventListener('click', load);
   get('ops-event').addEventListener('change', eventDetails);
   get('ops-label-close').addEventListener('click', closeLabel);
