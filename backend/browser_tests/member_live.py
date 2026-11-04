@@ -26,6 +26,7 @@ def test_member_login_private_pigeons_and_expired_session(live_server):
     other_ring = "MEMBER-OTHER-" + uuid4().hex[:8]
     own_email = "member-" + uuid4().hex + "@example.test"
     other_email = "member-" + uuid4().hex + "@example.test"
+    own_pigeon_id = None
     with psycopg.connect(server["pg"]) as db:
         for email, ring in ((own_email, own_ring), (other_email, other_ring)):
             uid, loft_id = uuid4(), uuid4()
@@ -35,8 +36,29 @@ def test_member_login_private_pigeons_and_expired_session(live_server):
             db.execute("""INSERT INTO lofts(id,user_id,name,latitude,longitude,verified_at)
                 VALUES (%s,%s,'Browser Test Loft',9.8,125.5,now())""",
                 (loft_id, uid))
-            db.execute("""INSERT INTO pigeons(loft_id,official_ring_number,status)
-                VALUES (%s,%s,'active')""", (loft_id, ring))
+            pigeon_id = uuid4()
+            db.execute("""INSERT INTO pigeons(id,loft_id,official_ring_number,status)
+                VALUES (%s,%s,%s,'active')""", (pigeon_id, loft_id, ring))
+            if email == own_email:
+                own_pigeon_id = pigeon_id
+                db.execute("INSERT INTO rfid_rings(pigeon_id,uid) VALUES (%s,%s)",
+                           (pigeon_id, "RFID-" + own_ring))
+
+    api = server["api"]
+    admin_token = ok(api.post("/auth/login", json={
+        "email": "chairman@qr-audit.example.test",
+        "password": "Audit-chairman-password-2026",
+    }))["access_token"]
+    headers = {"Authorization": "Bearer " + admin_token}
+    race_id = ok(api.post("/races", headers=headers, json={
+        "name": "Member Browser Race", "release_latitude": 10,
+        "release_longitude": 125.6,
+    }), 201)["id"]
+    assert api.post(f"/races/{race_id}/open", headers=headers).status_code == 200
+    entry = api.post(f"/races/{race_id}/entries", headers=headers, json={
+        "pigeon_id": str(own_pigeon_id), "expected_method": "RFID",
+    })
+    assert entry.status_code == 201, entry.text
 
     errors = []
     with sync_playwright() as tool:
@@ -57,7 +79,8 @@ def test_member_login_private_pigeons_and_expired_session(live_server):
             expect(page.locator("#pigeons")).to_contain_text(own_ring)
             assert other_ring not in page.locator("body").inner_text()
             expect(page.locator("#pigeon-count")).to_have_text("1")
-            expect(page.locator("#entries")).to_contain_text("No race entries yet.")
+            expect(page.locator("#entries")).to_contain_text("Member Browser Race")
+            expect(page.locator("#entries")).to_contain_text("No scan recorded")
             assert page.evaluate("localStorage.length + sessionStorage.length") == 0
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             assert page.locator("#workspace button").all_text_contents() == ["Refresh"]
