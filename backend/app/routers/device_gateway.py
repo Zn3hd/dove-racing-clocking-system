@@ -36,12 +36,36 @@ class GatewayArrival(BaseModel):
     capture_mode: Literal['automatic','operator','simulated'] | None = None
     original_scan: str | None = Field(default=None, min_length=1, max_length=1024)
 
+    @field_validator('ring_uid')
+    @classmethod
+    def nonblank_ring_uid(cls, value):
+        if not value.strip():
+            raise ValueError('Ring UID must not be blank')
+        return value.strip()
+
+    @field_validator('protocol', 'original_scan')
+    @classmethod
+    def nonblank_optional_evidence(cls, value):
+        if value is not None and not value.strip():
+            raise ValueError('Provided reader evidence must not be blank')
+        return value
+
     @field_validator('device_recorded_at')
     @classmethod
     def aware_timestamp(cls, value):
         if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise ValueError('Reader timestamps must include a timezone')
         return value
+
+
+def arrival_fingerprint(payload: GatewayArrival) -> str:
+    """Stable replay fingerprint; preserve historical hashes for absent fields."""
+    optional = {'adapter_type', 'protocol', 'capture_mode', 'original_scan'}
+    envelope = payload.model_dump(mode='json', exclude=optional)
+    for field in optional:
+        if getattr(payload, field) is not None:
+            envelope[field] = getattr(payload, field)
+    return digest(json.dumps(envelope, sort_keys=True))
 
 
 class ReaderCreate(BaseModel):
@@ -182,13 +206,7 @@ def receive_arrival(device_id: UUID,payload: GatewayArrival,
     if not x_device_token or len(x_device_token)>256:
         raise HTTPException(401,"Device token required")
     event_id=uuid4()
-    # Keep legacy hashes identical for clients that omit the new optional fields.
-    optional = {'adapter_type','protocol','capture_mode','original_scan'}
-    envelope = payload.model_dump(mode="json", exclude=optional)
-    for field in optional:
-        if getattr(payload, field) is not None:
-            envelope[field] = getattr(payload, field)
-    fingerprint=digest(json.dumps(envelope,sort_keys=True))
+    fingerprint = arrival_fingerprint(payload)
     with db.begin():
         device=db.execute(text("""
             SELECT d.loft_id,d.status,d.reader_adapter,d.reader_protocol,g.secret_hash,g.revoked_at
