@@ -58,6 +58,16 @@ class GatewayArrival(BaseModel):
         return value
 
 
+def arrival_fingerprint(payload: GatewayArrival) -> str:
+    """Stable replay fingerprint; preserve historical hashes for absent fields."""
+    optional = {'adapter_type', 'protocol', 'capture_mode', 'original_scan'}
+    envelope = payload.model_dump(mode='json', exclude=optional)
+    for field in optional:
+        if getattr(payload, field) is not None:
+            envelope[field] = getattr(payload, field)
+    return digest(json.dumps(envelope, sort_keys=True))
+
+
 class ReaderCreate(BaseModel):
     loft_id: UUID
     device_identifier: str = Field(min_length=1, max_length=200)
@@ -196,13 +206,7 @@ def receive_arrival(device_id: UUID,payload: GatewayArrival,
     if not x_device_token or len(x_device_token)>256:
         raise HTTPException(401,"Device token required")
     event_id=uuid4()
-    # Keep legacy hashes identical for clients that omit the new optional fields.
-    optional = {'adapter_type','protocol','capture_mode','original_scan'}
-    envelope = payload.model_dump(mode="json", exclude=optional)
-    for field in optional:
-        if getattr(payload, field) is not None:
-            envelope[field] = getattr(payload, field)
-    fingerprint=digest(json.dumps(envelope,sort_keys=True))
+    fingerprint = arrival_fingerprint(payload)
     with db.begin():
         device=db.execute(text("""
             SELECT d.loft_id,d.status,d.reader_adapter,d.reader_protocol,g.secret_hash,g.revoked_at
