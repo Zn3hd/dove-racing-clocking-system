@@ -90,4 +90,29 @@ def get_finalization_readiness(
     ).scalar_one_or_none()
     if status is None:
         raise HTTPException(404, "Race not found")
-    return {"race_id": race_id, **finalization_readiness(status)}
+    evidence = db.execute(text("""
+        SELECT
+            (SELECT count(*) FROM race_entries e
+             WHERE e.race_id=:id AND e.status='registered') AS registered_entries,
+            (SELECT count(*) FROM clocking_events c
+             JOIN race_entries e ON e.id=c.entry_id
+             WHERE e.race_id=:id AND e.status='registered') AS submitted_events,
+            (SELECT count(*) FROM clocking_events c
+             JOIN race_entries e ON e.id=c.entry_id
+             JOIN clocking_event_validation v ON v.event_id=c.id
+             WHERE e.race_id=:id AND e.status='registered'
+               AND cardinality(v.blocking_flags)>0) AS blocked_events,
+            (SELECT count(*) FROM clocking_events c
+             JOIN race_entries e ON e.id=c.entry_id
+             WHERE e.race_id=:id AND e.status='registered'
+               AND EXISTS (SELECT 1 FROM clocking_reviews cr
+                           WHERE cr.event_id=c.id AND cr.decision='approve')) AS approved_events,
+            (SELECT count(*) FROM guest_arrival_verifications gv
+             JOIN clocking_events c ON c.id=gv.event_id
+             JOIN race_entries e ON e.id=c.entry_id
+             WHERE e.race_id=:id AND e.status='registered'
+               AND gv.decision='confirmed') AS guest_physically_confirmed
+    """), {"id": race_id}).mappings().one()
+    return {"race_id": race_id, **finalization_readiness(status),
+            "evidence_summary": dict(evidence),
+            "evidence_summary_official": False}
