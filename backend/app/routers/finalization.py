@@ -90,6 +90,7 @@ def get_finalization_readiness(
     ).scalar_one_or_none()
     if status is None:
         raise HTTPException(404, "Race not found")
+    # Advisory evidence inventory: never an authorization to publish results.
     evidence = db.execute(text("""
         SELECT
             (SELECT count(*) FROM race_entries e
