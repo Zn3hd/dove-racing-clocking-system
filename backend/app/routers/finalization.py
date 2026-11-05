@@ -52,3 +52,42 @@ def finalize_race(race_id: UUID, db: Session = Depends(get_db),
             "independent guest arrival verification, and acceptance rules "
             "have been implemented and tested."
         )
+
+
+# This is an informational preflight, not a certification decision.
+# A closed race is necessary but never sufficient for official publication.
+FINALIZATION_BLOCKERS = (
+    "Trusted, independently verifiable RFID arrival evidence is not yet implemented.",
+    "Independent guest arrival verification and acceptance rules are not yet complete.",
+    "End-to-end official result certification and regression tests are not yet complete.",
+)
+
+
+def finalization_readiness(status: str) -> dict:
+    """Expose explicit blockers without mistaking a closed race for an official race."""
+    blockers = list(FINALIZATION_BLOCKERS)
+    if status != "closed":
+        blockers.insert(0, "Race must be closed before finalization can be considered.")
+    return {
+        "race_status": status,
+        "ready": False,
+        "official": False,
+        "blockers": blockers,
+        "next_action": "Complete trusted evidence and acceptance controls before enabling finalization.",
+    }
+
+
+@router.get("/{race_id}/finalization-readiness")
+def get_finalization_readiness(
+    race_id: UUID,
+    db: Session = Depends(get_db),
+    actor: dict = Depends(require_race_admin),
+):
+    """Read-only, administrator-authorized explanation of why publishing is blocked."""
+    status = db.execute(
+        text("SELECT status FROM races WHERE id=:id"),
+        {"id": race_id},
+    ).scalar_one_or_none()
+    if status is None:
+        raise HTTPException(404, "Race not found")
+    return {"race_id": race_id, **finalization_readiness(status)}
