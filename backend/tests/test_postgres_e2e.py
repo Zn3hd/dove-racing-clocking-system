@@ -881,6 +881,17 @@ def test_close_and_finalization_fail_closed(scenario):
     assert closed.status_code==200,closed.text
     assert closed.json()["official"] is False
     assert client.post(f"/races/{race}/close",headers=admin).status_code==409
+    readiness=client.get(f"/races/{race}/finalization-readiness",headers=admin)
+    assert readiness.status_code==200,readiness.text
+    report=readiness.json()
+    assert report["race_status"]=="closed"
+    assert report["ready"] is False and report["official"] is False
+    assert report["evidence_summary_official"] is False
+    assert report["evidence_summary"]["registered_entries"]==0
+    assert report["evidence_summary"]["submitted_events"]==0
+    assert report["evidence_summary"]["approved_events"]==0
+    assert report["evidence_summary"]["guest_physically_confirmed"]==0
+    assert client.get(f"/races/{race}/finalization-readiness").status_code==401
     blocked=client.post(f"/races/{race}/finalize",headers=admin)
     assert blocked.status_code==409
     assert "disabled" in blocked.json()["detail"]
