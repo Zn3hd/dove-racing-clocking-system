@@ -137,7 +137,12 @@ def get_finalization_readiness(
                     OR c.metadata->>'capture_mode' IS DISTINCT FROM 'automatic'
                     OR c.metadata->>'simulated' IS DISTINCT FROM 'false'
                     OR c.metadata->>'timestamp_trusted' IS DISTINCT FROM 'true')
-            ) AS rfid_events_without_certified_provenance
+            ) AS rfid_events_without_certified_provenance,
+            (SELECT count(*) FROM clocking_events c JOIN race_entries e ON e.id=c.entry_id
+             WHERE e.race_id=:id AND e.status='registered' AND c.method='RFID'
+               AND (c.metadata->>'offline_buffered'='true'
+                    OR c.metadata->>'device_recorded_at' IS NOT NULL)
+            ) AS rfid_events_with_device_time_claims
     """), {"id": race_id}).mappings().one()
     readiness = finalization_readiness(status)
     # Diagnostic flags are not proof of trust. In particular, a zero count
@@ -148,6 +153,7 @@ def get_finalization_readiness(
         "qr_without_physical_confirmation_present": evidence["qr_events_without_confirmation"] > 0,
         "validation_blockers_present": evidence["blocked_events"] > 0,
         "rfid_without_certified_provenance_present": evidence["rfid_events_without_certified_provenance"] > 0,
+        "rfid_device_time_claims_present": evidence["rfid_events_with_device_time_claims"] > 0,
     }
     return {"race_id": race_id, **readiness,
             "evidence_summary": dict(evidence),
