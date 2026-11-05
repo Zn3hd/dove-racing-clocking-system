@@ -111,8 +111,34 @@ def get_finalization_readiness(
              JOIN clocking_events c ON c.id=gv.event_id
              JOIN race_entries e ON e.id=c.entry_id
              WHERE e.race_id=:id AND e.status='registered'
-               AND gv.decision='confirmed') AS guest_physically_confirmed
+               AND gv.decision='confirmed') AS guest_physically_confirmed,
+            (SELECT count(*) FROM clocking_events c
+             JOIN race_entries e ON e.id=c.entry_id
+             WHERE e.race_id=:id AND e.status='registered'
+               AND c.metadata->>'simulated'='true') AS simulated_events,
+            (SELECT count(*) FROM clocking_events c
+             JOIN race_entries e ON e.id=c.entry_id
+             WHERE e.race_id=:id AND e.status='registered'
+               AND c.method='RFID' AND c.metadata->>'timestamp_trusted'='false') AS untrusted_rfid_timestamps,
+            (SELECT count(*) FROM clocking_events c
+             JOIN race_entries e ON e.id=c.entry_id
+             WHERE e.race_id=:id AND e.status='registered'
+               AND c.method='QR'
+               AND NOT EXISTS (
+                   SELECT 1 FROM guest_arrival_verifications gv
+                   WHERE gv.event_id=c.id AND gv.decision='confirmed'
+               )) AS qr_events_without_confirmation
     """), {"id": race_id}).mappings().one()
-    return {"race_id": race_id, **finalization_readiness(status),
+    readiness = finalization_readiness(status)
+    # Diagnostic flags are not proof of trust. In particular, a zero count
+    # does not certify a reader, clock, event, or result.
+    diagnostics = {
+        "simulated_arrivals_present": evidence["simulated_events"] > 0,
+        "untrusted_rfid_timestamps_present": evidence["untrusted_rfid_timestamps"] > 0,
+        "qr_without_physical_confirmation_present": evidence["qr_events_without_confirmation"] > 0,
+        "validation_blockers_present": evidence["blocked_events"] > 0,
+    }
+    return {"race_id": race_id, **readiness,
             "evidence_summary": dict(evidence),
+            "evidence_diagnostics": diagnostics,
             "evidence_summary_official": False}
