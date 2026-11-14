@@ -72,3 +72,7 @@
 - bcd8e07 Flutter Phase 1: add mobile/lib/session.dart
 - 2b73bf1 Flutter Phase 1: add mobile/lib/api.dart
 - f7918bc Flutter Phase 1: add mobile/pubspec.yaml
+
+## 2026-11-15 (Asia/Manila)
+
+- dc85b8f Improve clocking reliability, dashboard workflows and operator documentation
