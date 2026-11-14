@@ -56,6 +56,13 @@ def test_oversized_and_non_ascii_frames_fail_closed():
         ReportDecoder(profile()).feed(b'\xff')
 
 
+def test_unplugged_hid_is_recoverable_transport_failure(monkeypatch):
+    import sys
+    monkeypatch.setitem(sys.modules, 'hid', SimpleNamespace(enumerate=lambda *args: []))
+    with pytest.raises(OSError, match='unavailable'):
+        next(RawHID(profile()).readings())
+
+
 def test_raw_hid_selects_one_interface_and_closes(monkeypatch, tmp_path):
     import json
     import sys

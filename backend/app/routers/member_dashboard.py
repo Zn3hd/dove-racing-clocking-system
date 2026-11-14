@@ -64,7 +64,11 @@ def member_race_standings(race_id: UUID, db: Session = Depends(get_db),
     allowed = db.execute(text("""
         SELECT 1 FROM race_entries e
         JOIN lofts l ON l.id=e.loft_id
+        JOIN races r ON r.id=e.race_id
         WHERE e.race_id=:race AND l.user_id=:owner AND e.status='registered'
+          AND (r.club_id IS NULL OR EXISTS (
+              SELECT 1 FROM club_memberships m WHERE m.club_id=r.club_id
+                AND m.user_id=:owner AND m.club_role='member'))
         LIMIT 1
     """), {"race":race_id,"owner":actor["id"]}).first()
     if not allowed:

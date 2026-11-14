@@ -85,6 +85,8 @@ Stop with Ctrl+C. Unacknowledged scans remain queued. `sync --once` processes a
 batch of at most 100 due events. Continuous synchronization checks every five
 seconds; failed deliveries have exponential backoff up to five minutes.
 
+Continuous `run` also supervises serial/network/raw-HID transport failures, retrying at 5–60 seconds while the synchronization worker continues. Framing/configuration failures stop capture for operator correction. Keyboard-console EOF exits without retrying; a keyboard reader unplug cannot reliably be detected from stdin. Capture state is included in regular heartbeats, without treating gateway reachability as proof of physical reader health. See [reader recovery details](../docs/reader-monitoring.md#transport-recovery-follow-up).
+
 ## Delivery and timing contract
 
 SQLite stores each immutable payload before upload, using WAL and full

@@ -14,20 +14,33 @@ class ApiException implements Exception {
 
 class RacingApi {
   final http.Client client;
-  RacingApi(this.client);
+  final String baseUrl;
+  RacingApi(this.client, {this.baseUrl = apiBaseUrl});
 
   Future<dynamic> request(String path,
       {String method = 'GET', String? token, Object? body}) async {
-    final base = Uri.parse(apiBaseUrl);
-    if (base.scheme != 'https' && base.host != 'localhost' &&
-        base.host != '127.0.0.1') {
-      throw ApiException('API endpoint must use HTTPS.');
+    final base = Uri.tryParse(baseUrl);
+    if (base == null || base.host.isEmpty || base.userInfo.isNotEmpty ||
+        base.hasQuery || base.hasFragment ||
+        (base.path.isNotEmpty && base.path != '/') ||
+        (base.scheme != 'https' && !(base.scheme == 'http' &&
+            (base.host == 'localhost' || base.host == '127.0.0.1')))) {
+      throw ApiException('Configure an HTTPS API origin without credentials or a path.');
     }
-    final uri = base.resolve(path);
+    final relative = Uri.tryParse(path);
+    if (relative == null || !path.startsWith('/') || path.startsWith('//') ||
+        relative.hasScheme || relative.hasAuthority || relative.hasFragment) {
+      throw ApiException('API requests must use a path on the configured server.');
+    }
+    final uri = base.resolveUri(relative);
+    if (uri.origin != base.origin) {
+      throw ApiException('API requests must use the configured server.');
+    }
     http.Response response;
     try {
       response = await client
           .send(http.Request(method, uri)
+            ..followRedirects = false
             ..headers.addAll({
               'Accept': 'application/json',
               if (body != null) 'Content-Type': 'application/json',
@@ -38,6 +51,10 @@ class RacingApi {
           .timeout(const Duration(seconds: 75));
     } catch (_) {
       throw ApiException('Cannot reach the server. Check your connection and retry.');
+    }
+    if (response.statusCode >= 300 && response.statusCode < 400) {
+      throw ApiException('The API redirected the request. Check the configured server address.',
+          response.statusCode);
     }
     dynamic data;
     try {

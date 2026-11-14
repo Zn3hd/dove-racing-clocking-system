@@ -116,6 +116,8 @@ class RawHID(Adapter):
         matches = [item for item in hid.enumerate(cfg.vendor_id, cfg.product_id)
                    if (cfg.serial_number is None or item.get('serial_number') == cfg.serial_number)
                    and (cfg.interface_number is None or item.get('interface_number') == cfg.interface_number)]
+        if not matches:
+            raise OSError('Configured HID interface unavailable')
         if len(matches) != 1:
             raise ValueError("HID selection must match exactly one interface; configure serial/interface")
         device = hid.device()

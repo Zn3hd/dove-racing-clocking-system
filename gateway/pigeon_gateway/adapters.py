@@ -83,7 +83,7 @@ class SerialLines(Adapter):
 class NetworkLines(Adapter):
     """TCP client for explicitly configured ASCII newline protocols only.
 
-    EOF/timeout fails closed; run under a supervisor to reconnect. No vendor
+    EOF/timeout ends this connection; the CLI supervisor reconnects. No vendor
     discovery, commands, TLS, or binary decoding is implied.
     """
     def __init__(self, host: str, port: int, timeout: float = 10):

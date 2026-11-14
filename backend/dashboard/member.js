@@ -6,11 +6,20 @@ function clearSession(message = "") {
   $("workspace").hidden = true; $("login-panel").hidden = false;
   $("signout").hidden = true; $("login-error").textContent = message;
   $("login-form").reset(); selectedRace = "";
+  for (const id of ["welcome","pigeons","entries","standings-race","arrival-order","speed-ranking"])
+    $(id).replaceChildren();
+  for (const id of ["pigeon-count","active-count","scan-count","member-arrived","member-transit",
+    "member-top-speed","member-participants","member-race-name","member-race-release",
+    "member-arrived-pct","member-speed-unit","standings-status","sync-status",
+    "leader-arrived","leader-qualified","leader-fastest","leader-unit"]) $(id).textContent = "";
 }
 async function request(path, options = {}) {
+  const requestToken = token, requestGeneration = generation;
   const response = await fetch(path, { ...options, cache:"no-store", credentials:"omit",
     headers:{"Content-Type":"application/json", ...(token ? {Authorization:"Bearer " + token}: {})} });
   const data = await response.json().catch(() => ({}));
+  if (requestToken !== token || requestGeneration !== generation)
+    throw new DOMException("Session changed", "AbortError");
   if (!response.ok) {
     if (response.status === 401 && token) clearSession("Session expired. Please sign in again.");
     throw new Error(typeof data.detail === "string" ? data.detail : "Request failed (" + response.status + ")");
@@ -34,12 +43,14 @@ function leaderboardRow(e, position, unit, ranked = false) {
   const head = element("button", undefined, "leader-main");
   head.type = "button";
   head.setAttribute("aria-expanded", "false");
-  const number = element("span", String(position).padStart(2, "0"), "leader-position");
+  const number = element("span", (ranked && e.capture_mode === "simulated" ? "Test " : "") + String(position).padStart(2, "0"), "leader-position");
   const identity = element("span", undefined, "leader-identity");
   identity.append(element("strong", e.official_ring_number), element("small", new Date(e.arrival_at).toLocaleString()));
   const speed = element("span", undefined, "leader-speed");
   speed.append(element("strong", Number(e.display_speed).toFixed(2)), element("small", unit));
-  const arrow = element("span", "⌄", "leader-chevron");
+  const evidence = element("span", e.capture_mode === "simulated" ? "Simulated" : e.capture_mode === "automatic" ? "Automatic (declared)" : e.capture_mode || "Unknown capture", "member-evidence " + (e.capture_mode === "simulated" ? "is-simulated" : ""));
+  identity.append(evidence);
+  const arrow = element("span", "Details", "leader-chevron");
   arrow.setAttribute("aria-hidden", "true");
   head.append(number, identity, speed, arrow);
   const details = element("div", undefined, "leader-details");
@@ -154,7 +165,8 @@ async function refresh() {
     if (current === generation) $("sync-status").textContent = "Update failed: " + err.message;
   } finally {
     busy = false;
-    if (current === generation && token) {
+    if (token && refreshPending) { refreshPending = false; queueMicrotask(refresh); }
+    else if (current === generation && token) {
       if (refreshPending) { refreshPending = false; queueMicrotask(refresh); }
       else timer = setTimeout(refresh, 15000);
     }
@@ -175,7 +187,7 @@ $("login-form").addEventListener("submit", async (event) => {
     generation += 1;
     $("login-panel").hidden = true; $("workspace").hidden = false; $("signout").hidden = false;
     refresh();
-  } catch (err) { $("login-error").textContent = err.message; }
+  } catch (err) { clearSession(err.message); }
   finally { submit.disabled = false; }
 });
 $("signout").addEventListener("click", () => clearSession());

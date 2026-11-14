@@ -3,6 +3,22 @@
 The owner's planning estimate is 60% overall. Percentages are not acceptance
 criteria and have not been validated by a full repository and deployment audit.
 
+## Current delivery checkpoint — 7 November 2026
+
+This checkpoint supersedes older statements below about missing screens, PostgreSQL execution, network adapters and heartbeat monitoring. The remaining text also contains historical planning context.
+
+| Track | Implemented and verified locally | Next acceptance |
+| --- | --- | --- |
+| Web/backend | Administrator/member dashboards, Race operations, QR scan/recovery, validation, rankings and reader provisioning/monitoring; 121 backend tests and 4 member browser checks passed after audit fixes | Review/publish the uncommitted fixes, then verify the deployed version and migrations |
+| Gateway | USB keyboard/serial, configured raw HID, newline TCP, durable queue and heartbeat; 66 gateway tests passed | Physical reader/ring compatibility, disconnect/restart/endurance and Raspberry Pi tests |
+| Flutter | Authentication/session and club workflows, isolated demo, API origin/redirect protections; analysis and all 31 tests passed; first debug APK compiled | Physical phone authentication/permission/session checks against the intended test backend |
+| Android tooling | Flutter/Dart, Java 21, SDKs, build tools, platform tools, CMake and NDK installed; isolated build helper; first ARM64 debug APK built and signature/manifest verified | Install and exercise the test APK on a compatible phone; package ID/release signing remain future distribution work |
+| Official results/launch | Provisional calculations and validation exist; official finalization stays disabled | Trusted timing and offline policy, backup/restore, operational acceptance and certification |
+
+See [code audit](code-audit-2026-11-06.md), [Flutter local setup](flutter-local-setup.md) and [Android testing](android-testing.md). Mobile demo changes remain in memory and do not establish Render integration. No production writes, commits, pushes or deployments are implied by local tests or tool installation.
+
+Follow-up: the owner reports the Android phone test completed. Phone model, Android version and individual test evidence have not been recorded here, so this remains user-reported acceptance. Reader transport recovery is now implemented locally (capped reconnect backoff, preserved queue envelopes and capture-state heartbeat reporting), with 73 gateway tests passing. Next acceptance is a physical reader disconnect/reconnect and offline synchronization test in Surigao; software tests do not establish ring/reader compatibility.
+
 ## Current foundation audit
 
 - Architecture: FastAPI, PostgreSQL, SQL migrations, and CI exist.
@@ -109,3 +125,9 @@ do not restart it merely to match a planning folder sketch.
 ## Local reliability follow-up (awaiting approval)
 
 The four planned milestones are implemented locally: QR transaction serialization, durable no-secret browser receipt recovery, shared PostgreSQL rate limits (migration 013), and administrator Race operations. See `clocking-reliability.md`. Browser tests now exercise the full administration path and reload recovery with real APIs/database. Do not interpret this local status as deployment or physical hardware acceptance.
+
+## Scan-to-arrival audit — 7 November 2026 (local, not deployed)
+
+Completed a local software audit with 121 backend/PostgreSQL tests, 73 gateway tests, 25 Edge browser cases and 6 QR-core checks passing. Added real gateway queue/restart/lost-ack-to-browser tests for operator, declared automatic and simulated modes, with administrator/member arrival verification. Fixed notice overlap and view scroll behavior; strengthened navigation rerun passed nine cases.
+
+See [audit evidence and remaining gaps](functionality-audit-2026-11-07.md), [user guide](user-guide.md) and [Surigao acceptance script](surigao-hardware-test-guide.md). Physical reader/ring/antenna acceptance, trusted offline timing and official finalization remain outstanding. These results do not establish the current Render deployment or change phase estimates.

@@ -1,6 +1,7 @@
 """Member dashboard access and owner-scoping integration checks."""
 import os
 import pytest
+from sqlalchemy import text
 from test_postgres_e2e import scenario, make_race, register
 
 pytestmark = pytest.mark.skipif(
@@ -60,3 +61,21 @@ def test_member_standings_are_scoped_and_do_not_expose_private_identifiers(scena
     assert result["entries"] == []
     assert "device_id" not in response.text
     assert "rfid_uid" not in response.text
+
+
+def test_removed_club_member_cannot_read_shared_race_standings(scenario):
+    s=scenario;c=s['client'];admin=s['headers'](s['admin'])
+    club=c.post('/clubs',headers=admin,json={'name':'Revocable standings access'}).json()['id']
+    assert c.post(f'/clubs/{club}/members',headers=admin,json={'user_id':str(s['member'])}).status_code==201
+    created=c.post('/races',headers=admin,json={'club_id':club,'name':'Member access race',
+        'release_latitude':10,'release_longitude':125.6})
+    assert created.status_code==201,created.text
+    race=created.json()['id']
+    assert c.post(f'/races/{race}/open',headers=admin).status_code==200
+    register(s,race,s['pigeon_member'],'RFID')
+    endpoint=f'/member/races/{race}/standings';headers=s['headers'](s['member'])
+    assert c.get(endpoint,headers=headers).status_code==200
+    with s['engine'].begin() as db:
+        db.execute(text('DELETE FROM club_memberships WHERE club_id=:club AND user_id=:member'),
+                   {'club':club,'member':s['member']})
+    assert c.get(endpoint,headers=headers).status_code==404

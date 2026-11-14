@@ -302,6 +302,7 @@ function showView(view) {
     else $(`#${name}-nav`).removeAttribute("aria-current");
   }
   $(".crumb").textContent = view === "live" ? "/ Live race" : view === "operations" ? "/ Race operations" : "/ Members";
+  window.scrollTo(0, 0);
   if (view === "live") { live.active = true; loadRaces(); }
   if (view === 'operations') window.Operations.load();
 }
@@ -455,9 +456,9 @@ function renderLive(data) {
   const body = $("#live-rows");
   body.replaceChildren();
   for (const row of data.entries) {
-    const tr = element("tr");
+    const tr = element("tr", row.capture_mode === "simulated" ? "simulated-row" : "");
     const rank = element("td");
-    rank.append(element("span", "person-name", row.rank === null ? "Below minimum" : `#${row.rank}`),
+    rank.append(element("span", "person-name", row.rank === null ? (row.qualifying_status === "below_minimum" ? "Below minimum" : "Unranked") : `${row.capture_mode === "simulated" ? "Test " : ""}#${row.rank}`),
       element("span", "person-email", row.leaderboard));
     const bird = element("td");
     bird.append(element("span", "person-name", row.official_ring_number), element("span", "person-email", row.owner_name));
@@ -465,10 +466,18 @@ function renderLive(data) {
     arrival.append(element("span", "person-name", `Arrival #${row.arrival_order}`),
       element("span", "person-email", new Date(row.arrival_at).toLocaleString()));
     const evidence = element("td");
-    evidence.append(element("span", "badge", `${row.capture_mode} / ${row.clocking_method}`),
-      element("span", "person-email", `${row.reviewed ? "Reviewed" : "Unreviewed"} · ${row.offline_buffered ? "Buffered / " : ""}server time`));
+    const capture = row.capture_mode === "simulated" ? "Simulated" : row.capture_mode === "automatic" ? "Auto (declared)" : row.capture_mode === "operator" ? "Operator scan" : row.capture_mode === "manual" ? "Manual" : "Unknown capture";
+    const badges = element("div", "evidence-labels");
+    badges.append(element("span", `evidence-badge ${row.capture_mode === "simulated" ? "evidence-simulated" : "evidence-provisional"}`, capture),
+      element("span", `evidence-badge ${row.reviewed ? "evidence-reviewed" : "evidence-pending"}`, row.reviewed ? "Reviewed" : "Unreviewed"));
+    evidence.append(badges, element("span", "person-email", `${row.clocking_method} · ${row.offline_buffered ? "Buffered · " : ""}server receipt time`));
     tr.append(rank, bird, arrival, element("td", "", `${(row.distance_meters / 1000).toFixed(3)} km`),
       element("td", "", `${row.display_speed.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${data.speed_unit}`), evidence);
+    tr.setAttribute("role", "row");
+    ["Rank / group", "Pigeon / owner", "Arrival order / time", "Distance", "Speed", "Evidence"].forEach((label, index) => {
+      tr.children[index].dataset.label = label;
+      tr.children[index].setAttribute("role", "cell");
+    });
     body.append(tr);
   }
   $("#live-state").hidden = data.entries.length > 0;
@@ -491,6 +500,7 @@ async function pollLive(version = live.version) {
   }
 }
 
+$("#review-arrival-evidence").addEventListener("click", () => window.Operations.review(live.raceId));
 $("#members-nav").addEventListener("click", () => showView("members"));
 $("#live-nav").addEventListener("click", () => showView("live"));
 $("#reload-races").addEventListener("click", loadRaces);

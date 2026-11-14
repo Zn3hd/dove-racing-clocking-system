@@ -11,16 +11,18 @@ from .adapters import KeyboardLines, SerialLines, Simulator, NetworkLines
 from .config import Config
 from .queue import Queue
 from .sync import synchronize, validate_token, send_heartbeat
+from .capture import capture, ReaderStatus
 
 
-def sync_worker(config, token, stop):
+def sync_worker(config, token, stop, reader_status=None):
     queue = Queue(config.queue_path)
     try:
         with httpx.Client(trust_env=False) as client:
             next_heartbeat = 0
             while not stop.is_set():
                 if time.monotonic() >= next_heartbeat:
-                    print(json.dumps(send_heartbeat(queue, config, token, client)), flush=True)
+                    print(json.dumps(send_heartbeat(queue, config, token, client,
+                        reader_status.snapshot() if reader_status else 'not_probed')), flush=True)
                     next_heartbeat = time.monotonic() + 30
                 result = synchronize(queue, config, token, client, stop=stop)
                 if any(result.values()):
@@ -89,12 +91,13 @@ def main():
             adapter = SerialLines(config.serial_port, config.baudrate)
         else:
             raise ValueError("Use 'simulate --tag ...' to queue simulator scans")
-        worker = threading.Thread(target=sync_worker, args=(config, token, stop), daemon=True)
+        reader_status = ReaderStatus()
+        worker = threading.Thread(target=sync_worker, args=(config, token, stop, reader_status), daemon=True)
         worker.start()
         print("Reader ready. Console keyboard capture requires this console to stay focused.", flush=True)
-        for reading in adapter.readings():
-            queue.enqueue(config, reading)
-            print("Scan queued locally.", flush=True)
+        capture(lambda: adapter, queue, config, stop, reader_status,
+            reconnect=not isinstance(adapter, KeyboardLines),
+            notify=lambda message: print(message, flush=True))
     except KeyboardInterrupt:
         print("Stopped. Unacknowledged scans remain in the local queue.")
     except (ValueError, OSError, RuntimeError) as exc:

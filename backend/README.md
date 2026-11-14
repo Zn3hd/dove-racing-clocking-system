@@ -1,6 +1,8 @@
 # Dove Racing Backend — authentication and participant management (development)
 
-This branch implements PostgreSQL-backed race management, authenticated chairman/president routes, and participant registration. It is **not production ready**; no RFID/QR official clocking endpoints are active.
+This branch implements PostgreSQL-backed club/race management, guest QR capture, a hardware-independent RFID gateway, evidence review and provisional standings. **Official result finalization remains disabled.** Use the [current user guide](../docs/user-guide.md) for the supported workflow and the [functionality audit](../docs/functionality-audit-2026-11-07.md) for verified coverage and limits.
+
+Some phase-history notes below describe earlier milestones. They do not replace the current user guide or indicate that a local revision has been deployed.
 
 ## Local setup
 1. Create a dedicated PostgreSQL database. After installing requirements and setting the environment below, run `python -m scripts.run_migrations` to apply migrations `001` through `014`. The runner requires a fresh database or its existing migration ledger; see `../docs/render-postgres-migrations.md` for existing databases.
@@ -17,15 +19,14 @@ This branch implements PostgreSQL-backed race management, authenticated chairman
 - Accounts can be created only by an administrator. Loft coordinates require explicit administrator verification before pigeon registration.
 - For race registration, an RFID pigeon needs an active ring; QR entries must belong to a guest.
 
-## Remaining security and reliability work
-- Integration tests with real PostgreSQL, including rollback and concurrent registration.
-- Password reset, account lockout, deployment HTTPS configuration and token revocation. Shared login/submission rate limits are implemented in migration 013.
-- Permissions scoped to each participant's own data; club/multi-club tenancy.
-- Stronger loft verification process, RFID ring assignment, QR token issuance and clocking review.
-- Alembic migrations, schema versioning, and validated deployment configuration.
+## Current boundaries
 
-Do not deploy this development API to the public internet yet.
-
+- Club-scoped permissions, verified lofts, RFID mapping, device credentials, guest QR labels, evidence review and shared rate budgets are implemented and tested. See the current audit for the exact scope.
+- Physical reader/ring compatibility and automatic antenna detection still need field acceptance.
+- Reader clocks are untrusted; offline arrival speed uses server receipt, not backdated device observation time.
+- Official finalization remains disabled. Preview ranks and human evidence approval are not official results.
+- Password reset/account recovery, broader user-session revocation and production operational hardening remain separate work. Device credential rotation/revocation is already supported.
+- Local test success does not establish the currently deployed Render revision or live provider integration status.
 
 ## Phase 4: provisional clocking endpoints
 - `POST /races/{race_id}/activate` — admin records actual release time and activates an open race.
@@ -44,16 +45,15 @@ Example guest scan JSON:
 }
 ```
 
-**Limitations:** No physical RFID protocol, device authentication, clock attestation, offline signature verification, rate limiting, official first-valid-arrival selection, result finalization, or live database integration verification yet. A static QR secret is copyable, so QR evidence is never automatically official. Reusing an idempotency key is supported only for the same entry/method; distinct requests still produce separate pending evidence. Human approvals are stored but not automatically promoted to valid clockings. Do not deploy publicly.
-
+**Limitations:** Static QR labels are copyable and are operator evidence. The gateway authenticates a device credential but does not attest an antenna or clock. The Python gateway supports configured HID/serial/network adapters; actual reader protocols and matching tags still need field testing. Idempotent transport retries return the original event; changed replay content conflicts, while distinct physical scans can remain separate evidence. Blocking validation prevents ranking despite approval. Official finalization remains disabled.
 
 ## PostgreSQL end-to-end integration tests
 
-GitHub Actions now starts a disposable PostgreSQL 16 service, applies the actual `sql/001_schema.sql` and `sql/002_seed.sql` files, and runs the full pytest suite. `tests/test_postgres_e2e.py` exercises real API requests and persistent data for race creation, opening, registration, activation, guest ownership, QR token rotation, idempotency, RFID simulation, and review rejection. The CI database uses **test-only credentials** and is destroyed after the job.
+GitHub Actions starts a disposable PostgreSQL 16 service, applies migrations `001`–`014`, and runs the full pytest suite. `tests/test_postgres_e2e.py` exercises real API requests and persistent data for race creation, opening, registration, activation, guest ownership, QR token rotation, idempotency, RFID simulation, and review rejection. The CI database uses **test-only credentials** and is destroyed after the job.
 
 To run locally, use a **dedicated disposable database**, apply migrations `001` through `014`, install the gateway for cross-component tests with `python -m pip install -e ../gateway`, set `DATABASE_URL` and `TEST_DATABASE_URL` to that database and a 48+ character `JWT_SECRET_KEY`, then run `python -m pytest -q`. Never point integration tests at production or a database containing real club records.
 
-Integration suite status must be verified in GitHub Actions; committed tests are not evidence of passing tests. Remaining scenarios include concurrency races, expired tokens, offline hardware, race finalization, and first-valid-arrival selection.
+The [current functionality audit](../docs/functionality-audit-2026-11-07.md) records the latest local PostgreSQL and browser results. GitHub Actions status must be checked separately. Tests cover concurrency, expiry, first-eligible selection and software offline/replay behavior; physical offline hardware and official timing/finalization remain outside that proof.
 
 ## Hardware-independent RFID gateway
 
@@ -99,8 +99,7 @@ the club, searching/filtering participants, creating member/guest accounts,
 linking existing accounts by ID, editing names/phone numbers, and changing the
 signed-in administrator's password. JWTs are held only in page memory; refreshing
 or closing the page signs out. The server still enforces all club permissions.
-Directory totals cover at most the first 1000 returned participants. Loft,
-pigeon, race, and evidence screens are planned for the next dashboard milestones.
+Directory totals cover at most the first 1000 returned participants. Members supports loft location management; Race operations supports pigeon/ring setup, race controls, readers, QR labels and evidence review. The member-only page is `/dashboard/member.html`.
 Password changes do not revoke existing JWTs; the UI signs out after success.
 
 ## Club API
@@ -128,6 +127,6 @@ Migration `012` adds an optional loft `address` (500 characters), editable in th
 
 ## Reliability and Race operations
 
-Apply migration `013` before running this local revision. The new Race operations tab supports pigeon/ring registration, race setup/registration/release/close, private QR PNG issuance and revocation, evidence review and physical guest verification. The guest page has a durable no-secret recovery ledger and an authenticated receipt lookup. PostgreSQL rate budgets are shared across instances. See `../docs/clocking-reliability.md` for configuration, policy, tests and limitations. These local changes have not been approved for deployment.
+Apply migration `013` before running this local revision. The new Race operations tab supports pigeon/ring registration, race setup/registration/release/close, private QR PNG issuance and revocation, evidence review and physical guest verification. The guest page has a durable no-secret recovery ledger and an authenticated receipt lookup. PostgreSQL rate budgets are shared across instances. See `../docs/clocking-reliability.md` for configuration, policy, tests and limitations. Confirm the approved revision and migration ledger before deploying local changes.
 
 Reader setup and live gateway monitoring require migration `014`. See [reader monitoring](../docs/reader-monitoring.md) for provisioning, credentials, configuration and heartbeat semantics.

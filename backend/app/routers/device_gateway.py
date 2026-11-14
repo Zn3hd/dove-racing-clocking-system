@@ -91,11 +91,14 @@ class ReaderHeartbeat(BaseModel):
 def authenticated_device(db, device_id, token):
     if not token or len(token) > 256:
         raise HTTPException(401, 'Device token required')
-    device = db.execute(text('''SELECT d.id,d.loft_id,d.status,g.secret_hash,g.revoked_at
-        FROM devices d JOIN device_gateway_credentials g ON g.device_id=d.id
-        WHERE d.id=:id FOR UPDATE OF d'''), {'id': device_id}).mappings().first()
-    if (not device or device['status'] != 'active' or device['revoked_at'] is not None
-            or not hmac.compare_digest(device['secret_hash'], digest(token))):
+    # Acquire the serialization lock before reading credentials. A joined read
+    # can retain an old credential snapshot while waiting for the device lock.
+    device = db.execute(text('''SELECT id,loft_id,status,reader_adapter,reader_protocol
+        FROM devices WHERE id=:id FOR UPDATE'''), {'id': device_id}).mappings().first()
+    credential = db.execute(text('''SELECT secret_hash,revoked_at
+        FROM device_gateway_credentials WHERE device_id=:id'''), {'id': device_id}).mappings().first()
+    if (not device or not credential or device['status'] != 'active' or credential['revoked_at'] is not None
+            or not hmac.compare_digest(credential['secret_hash'], digest(token))):
         raise HTTPException(401, 'Device authentication failed')
     return device
 
@@ -208,13 +211,10 @@ def receive_arrival(device_id: UUID,payload: GatewayArrival,
     event_id=uuid4()
     fingerprint = arrival_fingerprint(payload)
     with db.begin():
-        device=db.execute(text("""
-            SELECT d.loft_id,d.status,d.reader_adapter,d.reader_protocol,g.secret_hash,g.revoked_at
-            FROM devices d JOIN device_gateway_credentials g ON g.device_id=d.id
-            WHERE d.id=:id FOR UPDATE OF d
-        """),{"id":device_id}).mappings().first()
-        if not device or device["status"]!="active" or device["revoked_at"] is not None or not hmac.compare_digest(device["secret_hash"],digest(x_device_token)):
-            raise HTTPException(401,"Device authentication failed")
+        # Match QR's race-before-reader lock order. Closing cannot overtake a
+        # new arrival; exact replay recovery still precedes active-state checks.
+        db.execute(text('SELECT id FROM races WHERE id=:id FOR SHARE'), {'id': payload.race_id})
+        device=authenticated_device(db, device_id, x_device_token)
         consume('device_scan_device', device_id, 600)
         if device['reader_adapter'] != 'unspecified' and (
                 payload.adapter_type != device['reader_adapter'] or payload.protocol != device['reader_protocol']):

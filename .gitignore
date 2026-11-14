@@ -23,6 +23,10 @@ __pycache__/
 node_modules/
 dist/
 
+# Flutter generated state
+**/.dart_tool/
+mobile/build/
+
 # Local databases and IDE
 *.sqlite3
 *.sqlite3-wal

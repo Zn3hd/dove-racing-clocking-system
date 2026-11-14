@@ -5,6 +5,48 @@ import 'package:http/testing.dart';
 import 'package:dove_racing_mobile/api.dart';
 
 void main() {
+  test('credentials are never sent to an absolute or foreign request path', () async {
+    var calls = 0;
+    final api = RacingApi(MockClient((_) async { calls++; return http.Response('{}', 200); }));
+    for (final path in ['https://other.example/auth/me', '//other.example/auth/me',
+        'auth/me', '/auth/me#secret']) {
+      await expectLater(api.request(path, token: 'private-token'), throwsA(isA<ApiException>()));
+    }
+    expect(calls, 0);
+  });
+
+  test('invalid API origins are rejected before sending credentials', () async {
+    var calls = 0;
+    final client = MockClient((_) async { calls++; return http.Response('{}', 200); });
+    for (final origin in ['http://example.com', 'ftp://localhost',
+        'https://user:password@example.com', 'https://example.com/api',
+        'https://example.com?secret=value', 'https://example.com#fragment', 'not a URL']) {
+      final api = RacingApi(client, baseUrl: origin);
+      await expectLater(api.me('private-token'), throwsA(isA<ApiException>()));
+    }
+    expect(calls, 0);
+  });
+
+  test('redirects are disabled and HTML redirects produce a safe error', () async {
+    final api = RacingApi(MockClient((request) async {
+      expect(request.followRedirects, isFalse);
+      return http.Response('<html>private data</html>', 302,
+          headers: {'location': 'https://other.example'});
+    }));
+    await expectLater(api.me('private-token'), throwsA(isA<ApiException>()
+        .having((e) => e.status, 'status', 302)
+        .having((e) => e.message, 'message', isNot(contains('private data')))));
+  });
+
+  test('explicit loopback HTTP and normal query paths are supported', () async {
+    final api = RacingApi(MockClient((request) async {
+      expect(request.url.origin, 'http://127.0.0.1:8000');
+      expect(request.url.queryParameters['club_id'], 'test-club');
+      return http.Response('[]', 200);
+    }), baseUrl: 'http://127.0.0.1:8000/');
+    expect(await api.participants('token', 'test-club'), isEmpty);
+  });
+
   test('login posts JSON credentials and parses bearer token', () async {
     final api = RacingApi(MockClient((request) async {
       expect(request.method, 'POST');
