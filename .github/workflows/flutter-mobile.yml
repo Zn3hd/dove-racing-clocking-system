@@ -24,6 +24,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.47.9'
           cache: true
       - name: Generate Android project
         run: flutter create --project-name dove_racing_mobile --platforms android .
@@ -81,6 +82,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.47.9'
           cache: true
       - uses: actions/setup-python@v5
         with:

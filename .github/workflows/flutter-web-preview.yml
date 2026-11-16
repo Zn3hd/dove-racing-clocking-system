@@ -22,6 +22,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.47.9'
           cache: true
       - name: Generate Flutter web scaffold
         run: flutter create --project-name dove_racing_mobile --platforms web .
