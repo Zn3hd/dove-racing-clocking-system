@@ -189,7 +189,7 @@ def test_real_browser_guest_qr_to_reviewed_standings(live_server, capture):
                 expect(admin.locator('#reader-list')).to_contain_text('Pending: 2')
                 admin.once('dialog',lambda dialog:dialog.accept())
                 with admin.expect_response(lambda r:r.url.endswith('/revoke')) as revoked:
-                    admin.get_by_role('button',name='Revoke credential',exact=True).click()
+                    admin.get_by_role('button',name='Revoke credential / invitation',exact=True).click()
                 assert revoked.value.status==200
                 expect(admin.locator('#reader-list')).to_contain_text('Gateway: revoked')
                 assert api.post(f'/devices/{device_id}/heartbeat',headers={'X-Device-Token':token},
