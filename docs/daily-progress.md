@@ -76,3 +76,9 @@
 ## 2026-11-15 (Asia/Manila)
 
 - dc85b8f Improve clocking reliability, dashboard workflows and operator documentation
+
+## 2026-11-17 (Asia/Manila)
+
+- e6f7b36 Update QR browser test for reader invitation revocation control
+- d4ac970 Pin Flutter CI to the locally validated SDK version
+- 58bb32e Add secure owner reader enrollment and durable mobile clocking pilot
