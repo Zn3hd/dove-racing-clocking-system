@@ -16,7 +16,7 @@ If your PowerShell policy blocks scripts, inspect the file and run it using a pr
 powershell -NoProfile -ExecutionPolicy Bypass -File .\mobile\tool\build_android.ps1
 ```
 
-The helper copies `lib`, `test` and `pubspec.yaml` into a new ignored workspace, generates Android scaffolding, configures internet access, disables application backup and cleartext networking, analyzes the app, runs tests and builds an ARM64 debug APK. It prints the output path and SHA-256 checksum. Existing repository platform files and source are not overwritten.
+The helper copies `lib`, `test`, `pubspec.yaml`, `pubspec.lock` and analysis settings into a new ignored workspace, generates Android scaffolding, restores and enforces the reviewed lockfile, configures internet access, disables application backup and cleartext networking, analyzes the app, runs tests and builds an ARM64 debug APK. It prints the output path and SHA-256 checksum. Existing repository platform files and source are not overwritten.
 
 The default build uses the Render API origin, but building does not log in or modify production data. `-ApiUrl` may select an HTTPS staging origin. `-Preview` builds the in-memory demo that bypasses live authentication; demo results do not establish API integration. No API key, device token or administrator password belongs in build arguments.
 
@@ -25,6 +25,22 @@ If the Gradle wrapper download fails, obtain the matching official Gradle binary
 Debug signing and the generated example application ID are for testing only. Use a separate reviewed application ID and release signing process before distribution. Android ARM64 hardware is required for this artifact; it is not an x86 emulator build. The generated platform's minimum Android SDK must also be satisfied by the phone.
 
 ## Physical phone acceptance
+
+Latest owner-reader follow-up: version 0.2.0/code 2,
+`dist/android/pigeon-racing-owner-reader-20261116-arm64.apk`, SHA-256
+`19a2028ef004618096d32b7a7448b989c8085c3ce26f15556ed62ba281a2608d`.
+Its signature and packaged network/backup settings were verified. Follow the
+[owner reader guide](mobile-owner-reader-guide.md); backend migration 016 is
+required. This is a foreground operator/simulator pilot, not certified automatic
+arrival capture. Install/use only with an approved test backend and resources.
+
+Latest local RFID simulator build (16 November 2026):
+`dist/android/pigeon-racing-rfid-simulator-20261116-arm64.apk`, SHA-256
+`023a93546f7caf14d7da8897ef8420a562db0d4ecd29ee290baaa86fb5036fd8`.
+Signature and manifest verified; 50 mobile tests passed and the actual
+Flutter/FastAPI/PostgreSQL lost-acknowledgement test passed separately. See
+[pilot instructions](mobile-rfid-pilot.md). This adds only a foreground simulator;
+it does not enable a physical USB/Bluetooth reader or establish iPhone support.
 
 Use an authorized test account and approved test club/race. Do not experiment with another club's live records. Install only the APK supplied by the administrator and verify its checksum before installation. Device-side installation prompts are handled by the tester.
 

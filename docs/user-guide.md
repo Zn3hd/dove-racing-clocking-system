@@ -8,6 +8,11 @@ This is a development pilot. Standings are provisional, and official result fina
 
 ## 1. Open the app
 
+The local Flutter owner-reader follow-up adds private phone enrollment and focused
+keyboard operator scanning. See [owner phone reader instructions](mobile-owner-reader-guide.md).
+It requires backend migration 016 and an approved deployment; this does not
+change the browser QR workflow or establish physical RFID acceptance.
+
 | Page | Link | Who uses it |
 | --- | --- | --- |
 | Club administration | https://dove-racing-clocking-system.onrender.com/dashboard/ | Authorized chairman/president administrators |
@@ -45,6 +50,8 @@ Administrator permissions are limited by club access. Being an administrator doe
 5. Choose **Sign out** when finished, especially on a shared computer.
 
 Login sessions are kept in page memory. Reloading or closing the page requires signing in again. If the app reports an expired session, sign in again before continuing.
+
+After the session-security update (migration 015), changing your password also invalidates all your existing browser and phone sessions. Other devices return to sign-in on their next authenticated request. Use the new password to sign in again. The first deployment of this update also requires everyone to sign in again. This update is local until an approved deployment.
 
 Guest accounts sign in on the separate guest QR page. A member account is not a guest QR account.
 

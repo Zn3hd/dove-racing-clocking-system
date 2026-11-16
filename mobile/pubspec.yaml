@@ -1,7 +1,7 @@
 name: dove_racing_mobile
 description: Dove Racing Clocking System mobile client
 publish_to: none
-version: 0.1.0+1
+version: 0.2.0+2
 environment:
   sdk: '>=3.4.0 <4.0.0'
 dependencies:
@@ -9,9 +9,24 @@ dependencies:
     sdk: flutter
   http: ^1.3.0
   flutter_secure_storage: ^9.2.4
+  sqflite: ^2.4.6
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  sqflite_common_ffi: ^2.4.7
+  # Required for per-platform test-library hook configuration below.
+  sqlite3: ^3.9.1
 flutter:
   uses-material-design: true
+
+# Windows tests use the OS library; phone storage uses the native sqflite plugin.
+hooks:
+  user_defines:
+    sqlite3:
+      source:
+        windows: system
+        default: sqlite3
+      name:
+        windows: winsqlite3
+        default: sqlite3

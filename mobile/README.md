@@ -1,8 +1,14 @@
 # Dove Racing Mobile — Phase 1
 
-Flutter client for the existing FastAPI prototype. No backend migrations or new API routes.
+Flutter client for the FastAPI prototype. Owner reader enrollment requires backend
+migration 016 and the new owner-scoped endpoints. See the [owner reader guide](../docs/mobile-owner-reader-guide.md).
 
 ## Features
+- Local RFID simulator pilot: durable queue, device-authenticated synchronization
+  and receipt/rejection states. See [pilot setup and limitations](../docs/mobile-rfid-pilot.md).
+  Member enrollment, focused keyboard operator capture, heartbeat and backup-confirmed
+  receipt cleanup are also implemented locally. Direct USB/serial/BLE adapters,
+  background capture and physical hardware acceptance remain outstanding.
 - Email/password login via POST /auth/login
 - Secure token storage via flutter_secure_storage
 - Session expiry with a 30-second margin

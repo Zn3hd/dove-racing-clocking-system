@@ -61,6 +61,8 @@ jobs:
               conn.execute(Path("sql/012_loft_address.sql").read_text())
               conn.execute(Path("sql/013_rate_limits.sql").read_text())
               conn.execute(Path("sql/014_reader_monitoring.sql").read_text())
+              conn.execute(Path("sql/015_user_session_version.sql").read_text())
+              conn.execute(Path("sql/016_reader_enrollment.sql").read_text())
           PY
       - name: Compile Python source (catch syntax errors)
         run: python -m compileall -q app tests
@@ -120,7 +122,7 @@ jobs:
       - run: node --test tests/qr-core.test.cjs
       - run: python -m pip install -r requirements.txt -r requirements-browser-test.txt -e ../gateway
       - run: python -m playwright install --with-deps chromium
-      - run: python -m pytest -q browser_tests/qr_browser.py browser_tests/qr_live.py browser_tests/rfid_live.py browser_tests/member_live.py browser_tests/member_security.py browser_tests/workspace_browser.py --basetemp=.pytest-tmp-qr-browser
+      - run: python -m pytest -q browser_tests/qr_browser.py browser_tests/qr_live.py browser_tests/rfid_live.py browser_tests/member_live.py browser_tests/member_security.py browser_tests/workspace_browser.py browser_tests/session_live.py browser_tests/reader_enrollment_live.py --basetemp=.pytest-tmp-qr-browser
   esp32-build:
     runs-on: ubuntu-latest
     steps:

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'api.dart';
 import 'session.dart';
@@ -8,6 +9,8 @@ import 'preview_pigeon_edit.dart';
 import 'preview_race_edit.dart';
 
 import 'management_form.dart';
+import 'rfid/pilot_page.dart';
+import 'rfid/owner_setup_page.dart';
 
 const isWebPreview = bool.fromEnvironment('WEB_PREVIEW', defaultValue: false);
 
@@ -150,7 +153,7 @@ class _LoginPageState extends State<LoginPage> {
             const SizedBox(height: 16),
             Text('Club sign in', style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: 8),
-            const Text('Use your existing Dove Racing administrator credentials.'),
+            const Text('Use your club-issued Dove Racing account.'),
             const SizedBox(height: 24),
             TextFormField(controller: email, keyboardType: TextInputType.emailAddress,
               autofillHints: const [AutofillHints.username], decoration: const InputDecoration(
@@ -254,6 +257,25 @@ class _HomePageState extends State<HomePage> {
             Text('Welcome, ${me['full_name'] ?? 'Member'}',
               style: Theme.of(context).textTheme.headlineSmall),
             Text('Account role: ${me['role'] ?? 'unknown'}'),
+            if (!isWebPreview && !kIsWeb && me['role'] == 'member' &&
+                [TargetPlatform.android, TargetPlatform.iOS].contains(defaultTargetPlatform))
+              Card(child: ListTile(leading: const Icon(Icons.sensors),
+                title: const Text('My loft reader'),
+                subtitle: const Text('Enroll your assigned reader and open a foreground clocking session.'),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) =>
+                  OwnerReaderSetupPage(api: widget.api, token: widget.token,
+                    ownerId: me['id'].toString(), onUnauthorized: widget.onUnauthorized))),
+              )),
+            if (!isWebPreview && !kIsWeb &&
+                [TargetPlatform.android, TargetPlatform.iOS].contains(defaultTargetPlatform) &&
+                canManageClub(me['role'] as String?))
+              Card(child: ListTile(
+                leading: const Icon(Icons.science_outlined),
+                title: const Text('RFID simulator pilot'),
+                subtitle: const Text('Test the phone queue and upload. No physical reader support yet.'),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => RfidPilotPage(ownerId: me['id'].toString(), origin: widget.api.baseUrl))),
+              )),
             const SizedBox(height: 24),
             Text('My clubs', style: Theme.of(context).textTheme.titleLarge),
             if (!canManageClub(me['role'] as String?))

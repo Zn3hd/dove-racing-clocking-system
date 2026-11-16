@@ -125,6 +125,7 @@ def revoke_reader(device_id: UUID, actor: dict = Depends(require_admin), db: Ses
             raise HTTPException(404, 'Device not found')
         check_loft_admin(db, actor, loft)
         db.execute(text('SELECT id FROM devices WHERE id=:id FOR UPDATE'), {'id': device_id})
+        db.execute(text('DELETE FROM reader_enrollments WHERE device_id=:id'), {'id': device_id})
         db.execute(text('UPDATE device_gateway_credentials SET revoked_at=clock_timestamp() WHERE device_id=:id'), {'id': device_id})
         db.execute(text('''UPDATE devices SET heartbeat_at=NULL,reported_reader_state=NULL,
             reported_pending_count=NULL,reported_rejected_count=NULL WHERE id=:id'''), {'id': device_id})
@@ -157,6 +158,10 @@ def list_readers(actor: dict=Depends(require_admin), db: Session=Depends(get_db)
     rows = db.execute(text('''SELECT d.id,d.loft_id,d.device_identifier,d.status,d.last_seen_at,
         d.reader_adapter,d.reader_protocol,d.heartbeat_at,d.reported_reader_state,
         d.reported_pending_count,d.reported_rejected_count,
+        CASE WHEN invite.device_id IS NULL THEN 'none'
+             WHEN invite.consumed_at IS NOT NULL THEN 'consumed'
+             WHEN invite.expires_at<=clock_timestamp() THEN 'expired'
+             ELSE 'pending' END AS enrollment_status,
         CASE WHEN g.device_id IS NULL THEN 'unprovisioned' WHEN g.revoked_at IS NOT NULL THEN 'revoked'
              ELSE 'provisioned' END AS credential_status,
         CASE WHEN d.status<>'active' THEN 'inactive'
@@ -166,6 +171,7 @@ def list_readers(actor: dict=Depends(require_admin), db: Session=Depends(get_db)
              ELSE 'recent' END AS gateway_status
         FROM devices d JOIN lofts l ON l.id=d.loft_id
         LEFT JOIN device_gateway_credentials g ON g.device_id=d.id
+        LEFT JOIN reader_enrollments invite ON invite.device_id=d.id
         WHERE EXISTS(SELECT 1 FROM club_memberships a JOIN club_memberships m ON m.club_id=a.club_id
             WHERE a.user_id=:actor AND a.club_role='admin' AND m.user_id=l.user_id
             AND m.club_role IN ('member','guest'))
@@ -186,6 +192,7 @@ def provision(device_id: UUID, actor: dict=Depends(require_admin),
                           {"id":device_id}).scalar_one_or_none()
         if device is None:
             raise HTTPException(404,"Active device not found")
+        db.execute(text('DELETE FROM reader_enrollments WHERE device_id=:id'), {'id': device_id})
         db.execute(text("""
             INSERT INTO device_gateway_credentials(device_id,secret_hash,provisioned_by)
             VALUES (:device,:hash,:actor)

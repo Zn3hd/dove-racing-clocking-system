@@ -5,7 +5,7 @@ This branch implements PostgreSQL-backed club/race management, guest QR capture,
 Some phase-history notes below describe earlier milestones. They do not replace the current user guide or indicate that a local revision has been deployed.
 
 ## Local setup
-1. Create a dedicated PostgreSQL database. After installing requirements and setting the environment below, run `python -m scripts.run_migrations` to apply migrations `001` through `014`. The runner requires a fresh database or its existing migration ledger; see `../docs/render-postgres-migrations.md` for existing databases.
+1. Create a dedicated PostgreSQL database. After installing requirements and setting the environment below, run `python -m scripts.run_migrations` to apply migrations `001` through `016`. The runner requires a fresh database or its existing migration ledger; see `../docs/render-postgres-migrations.md` for existing databases.
 2. Set `DATABASE_URL` and a randomly generated `JWT_SECRET_KEY` (48+ characters) in your environment. Copy `.env.example` to local `.env` if useful; environment variables must be loaded into the process before running.
 3. Bootstrap the first chairman using environment variables `BOOTSTRAP_ADMIN_NAME`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` (12+ characters), then run from `backend/`: `python -m scripts.bootstrap_admin`. This script refuses to run if any administrator already exists. Unset bootstrap credentials afterward.
 4. Install requirements: `python -m pip install -r requirements.txt`
@@ -51,7 +51,7 @@ Example guest scan JSON:
 
 GitHub Actions starts a disposable PostgreSQL 16 service, applies migrations `001`–`014`, and runs the full pytest suite. `tests/test_postgres_e2e.py` exercises real API requests and persistent data for race creation, opening, registration, activation, guest ownership, QR token rotation, idempotency, RFID simulation, and review rejection. The CI database uses **test-only credentials** and is destroyed after the job.
 
-To run locally, use a **dedicated disposable database**, apply migrations `001` through `014`, install the gateway for cross-component tests with `python -m pip install -e ../gateway`, set `DATABASE_URL` and `TEST_DATABASE_URL` to that database and a 48+ character `JWT_SECRET_KEY`, then run `python -m pytest -q`. Never point integration tests at production or a database containing real club records.
+To run locally, use a **dedicated disposable database**, apply migrations `001` through `016`, install the gateway for cross-component tests with `python -m pip install -e ../gateway`, set `DATABASE_URL` and `TEST_DATABASE_URL` to that database and a 48+ character `JWT_SECRET_KEY`, then run `python -m pytest -q`. Never point integration tests at production or a database containing real club records.
 
 The [current functionality audit](../docs/functionality-audit-2026-11-07.md) records the latest local PostgreSQL and browser results. GitHub Actions status must be checked separately. Tests cover concurrency, expiry, first-eligible selection and software offline/replay behavior; physical offline hardware and official timing/finalization remain outside that proof.
 
@@ -100,7 +100,12 @@ linking existing accounts by ID, editing names/phone numbers, and changing the
 signed-in administrator's password. JWTs are held only in page memory; refreshing
 or closing the page signs out. The server still enforces all club permissions.
 Directory totals cover at most the first 1000 returned participants. Members supports loft location management; Race operations supports pigeon/ring setup, race controls, readers, QR labels and evidence review. The member-only page is `/dashboard/member.html`.
-Password changes do not revoke existing JWTs; the UI signs out after success.
+Password changes increment the account's session version atomically with the
+password update. All older JWTs are rejected on subsequent authenticated requests;
+the dashboard signs out after success. Migration 015 is required before running
+this version. Tokens issued before this release lack the required session-version
+claim and also require a fresh login. Requests already authenticated before a
+password change are not cancelled. This does not revoke separate reader tokens.
 
 ## Club API
 
@@ -130,3 +135,13 @@ Migration `012` adds an optional loft `address` (500 characters), editable in th
 Apply migration `013` before running this local revision. The new Race operations tab supports pigeon/ring registration, race setup/registration/release/close, private QR PNG issuance and revocation, evidence review and physical guest verification. The guest page has a durable no-secret recovery ledger and an authenticated receipt lookup. PostgreSQL rate budgets are shared across instances. See `../docs/clocking-reliability.md` for configuration, policy, tests and limitations. Confirm the approved revision and migration ledger before deploying local changes.
 
 Reader setup and live gateway monitoring require migration `014`. See [reader monitoring](../docs/reader-monitoring.md) for provisioning, credentials, configuration and heartbeat semantics.
+
+## Owner phone reader enrollment (local milestone)
+
+Migration 016 adds owner-bound, hashed, one-use invitations. Administrators issue
+`POST /devices/{id}/enrollment`; active member owners redeem through
+`POST /member/reader-enrollments/redeem` and fetch only their assignments using
+`GET /member/readers`. Invitations expire after ten minutes and are consumed
+atomically while rotating the device credential. Manual rotation/revocation
+cancels outstanding invitations. Monitoring reports invitation status without
+returning codes or credentials. See [owner phone reader guide](../docs/mobile-owner-reader-guide.md).

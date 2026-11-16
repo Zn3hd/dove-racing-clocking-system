@@ -1,5 +1,44 @@
 # Development roadmap
 
+## Owner phone reader checkpoint — 16 November 2026 (local)
+
+Migration 016 and Flutter 0.2.0/code 2 add one-use member-bound enrollment,
+owner-scoped reader/race selection, focused keyboard operator capture, serialized
+input bursts, heartbeat reporting and confirmed-backup receipt cleanup.
+Analysis and 58 mobile tests passed. The full backend suite passed 141 cases;
+14 final enrollment/monitor/browser checks passed after monitoring follow-up.
+Two actual Flutter/FastAPI/PostgreSQL flows passed through enrollment, durable
+capture, lost acknowledgement/restart replay, heartbeat, review and provisional
+speed/ranking. These counts overlap and must not be summed as independent tests.
+
+See [current owner guide](mobile-owner-reader-guide.md). Direct USB/serial/BLE
+drivers, dependable background/unattended capture, exact reader/ring/phone
+acceptance, iOS compilation and trusted official/offline timing remain gated.
+No commit, push or deployment was performed.
+
+## Mobile gateway foundation — 16 November 2026 (local)
+
+Flutter now includes an administrator-only foreground RFID simulator pilot,
+durable SQLite queue, immutable account/backend/reader/race envelopes, secure
+device credentials and replay-safe synchronization using the existing API.
+Analysis passed and 50 mobile tests passed; the one opt-in live case is skipped
+in the normal suite and passed separately against actual FastAPI/PostgreSQL,
+including lost-acknowledgement/restart replay with one backend record.
+
+See [pilot setup and limitations](mobile-rfid-pilot.md). Physical adapters,
+owner enrollment, background capture, heartbeat integration, iOS builds and
+Surigao hardware acceptance remain outstanding. No commit, push or deployment
+was performed for this checkpoint.
+
+## Session security checkpoint — 14 November 2026 (local)
+
+Password changes now revoke older account JWTs using migration 015 and a signed
+session-version claim. The full backend run passed 130 tests; all ten focused
+session-security cases and a real two-context Edge password-change/relogin test
+also passed. Follow-up cases overlap the full run. See [session security](session-security.md)
+for evidence and deployment cutover requirements. This work is not committed or
+deployed. Physical hardware acceptance and trusted offline timing remain next.
+
 The owner's planning estimate is 60% overall. Percentages are not acceptance
 criteria and have not been validated by a full repository and deployment audit.
 
@@ -23,8 +62,8 @@ Follow-up: the owner reports the Android phone test completed. Phone model, Andr
 
 - Architecture: FastAPI, PostgreSQL, SQL migrations, and CI exist.
 - Security: JWT login, protected administrator endpoints, password changes,
-  and guarded first-admin setup exist. Password changes do not revoke existing
-  JWTs. Rotation of exposed credentials and removal of the Render
+  and guarded first-admin setup exist. Local migration 015 adds password-change
+  session revocation; deployment acceptance remains pending. Rotation of exposed credentials and removal of the Render
   `ADMIN_BOOTSTRAP_SECRET` variable have not been verified.
 - Clubs: creation, administrator membership, listing, and member assignment
   exist. Duplicate assignments are handled atomically. Migration 008 adds a

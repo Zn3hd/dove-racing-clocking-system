@@ -6,7 +6,7 @@
     <form id="reader-create"><div class="form-grid"><label>Loft<select name="loft_id" required></select></label><label>Unique reader name<input name="device_identifier" maxlength="200" required></label><label>Adapter<select name="reader_adapter"><option value="simulator">Simulator (test only)</option><option value="usb_hid">USB keyboard / HID</option><option value="serial">USB serial</option><option value="network">Network text protocol</option></select></label><label>Documented protocol label<input name="reader_protocol" maxlength="120" value="ascii-newline-v1" required></label></div><p class="field-help">Choose the reader's actual output protocol. Frequency alone does not establish compatibility. Only one active reader per loft is supported.</p><button class="primary" type="submit">Register reader</button></form>
     <p id="reader-status" role="status"></p><div id="reader-list"></div>
     <h3>Gateway configuration</h3><label>Reader<select id="reader-config-device"></select></label><label>Race<select id="reader-config-race"></select></label><button id="reader-config-generate" type="button" class="outline">Prepare configuration</button><pre id="reader-config-output"></pre><p class="field-help">Copy this non-secret JSON into gateway/config.local.json. Set PIGEON_DEVICE_TOKEN privately on the gateway computer. Serial and network readers require local port/host settings; consult gateway/README.md before starting capture. Do not put credentials in JSON.</p>
-    <dialog id="reader-secret"><h2>One-time device credential</h2><p>Rotation immediately invalidates the previous credential. Copy privately into PIGEON_DEVICE_TOKEN on the gateway computer. Closing clears this display.</p><textarea id="reader-secret-value" readonly rows="3" aria-label="One-time device token"></textarea><button id="reader-secret-close" type="button" class="outline">Close and clear</button></dialog>`;
+    <dialog id="reader-secret"><h2 id="reader-secret-kind">One-time device credential</h2><p id="reader-secret-help">Rotation immediately invalidates the previous credential. Copy privately into PIGEON_DEVICE_TOKEN on the gateway computer. Closing clears this display.</p><textarea id="reader-secret-value" readonly rows="3" aria-label="One-time device token"></textarea><button id="reader-secret-close" type="button" class="outline">Close and clear</button></dialog>`;
   document.getElementById('operations-view').append(host);
   const el=id=>document.getElementById(id);
   let generation=0, timer=null, devices=[], busy=false;
@@ -27,15 +27,21 @@
       devices=result; options(el('reader-config-device'),devices,d=>d.device_identifier);
       el('reader-list').replaceChildren(...devices.map(d=>{
         const row=element('div','verification-box');
-        row.append(element('p','',`${d.device_identifier} | ${d.reader_adapter} / ${d.reader_protocol} | Gateway: ${d.gateway_status} | Credential: ${d.credential_status}`));
+        row.append(element('p','',`${d.device_identifier} | ${d.reader_adapter} / ${d.reader_protocol} | Gateway: ${d.gateway_status} | Credential: ${d.credential_status} | Invitation: ${d.enrollment_status || 'unknown'}`));
         row.append(element('p','field-help',`Heartbeat: ${d.heartbeat_at?new Date(d.heartbeat_at).toLocaleString():'never'} | Reader report: ${d.reported_reader_state || 'unknown'} | Pending: ${d.reported_pending_count ?? 'unknown'} | Rejected: ${d.reported_rejected_count ?? 'unknown'} | Last arrival: ${d.last_seen_at?new Date(d.last_seen_at).toLocaleString():'never'}`));
         button(row,'Provision / rotate token',async auth=>{
           if(d.credential_status==='provisioned' && !window.confirm('Rotate this credential? The existing gateway must be updated before it can send again.')) return;
           const result=await post(`/devices/${d.id}/provision`,{}); if(state.token!==auth) return;
-          el('reader-secret-value').value=result.device_token; el('reader-secret').showModal(); await refresh();
+          el('reader-secret-kind').textContent='One-time device credential'; el('reader-secret-help').textContent='Rotation invalidates the previous credential. Share privately with the gateway operator. Closing clears this display.'; el('reader-secret-value').value=result.device_token; el('reader-secret').showModal(); await refresh();
         });
-        if(d.credential_status==='provisioned') button(row,'Revoke credential',async auth=>{
-          if(!window.confirm('Revoke this gateway credential? New heartbeats and arrivals will be blocked. Queued evidence remains on its gateway.')) return;
+        button(row,'Create owner invitation',async auth=>{
+          if(!window.confirm('Create a private one-use invitation for this reader’s member owner? It expires in 10 minutes. Redeeming it rotates the existing gateway credential.')) return;
+          const result=await post(`/devices/${d.id}/enrollment`,{}); if(state.token!==auth) return;
+          el('reader-secret-kind').textContent='Private owner invitation'; el('reader-secret-help').textContent=`One use for the assigned member; expires ${new Date(result.expires_at).toLocaleString()}. Redeeming rotates the reader credential. Copy only the code below. Closing clears this display.`; el('reader-secret-value').value=result.enrollment_code;
+          el('reader-secret').showModal();
+        });
+        button(row,'Revoke credential / invitation',async auth=>{
+          if(!window.confirm('Revoke this gateway credential and cancel its invitation? New requests will be blocked if a credential exists. Queued evidence remains on its gateway.')) return;
           await post(`/devices/${d.id}/revoke`,{}); if(state.token===auth) { clearSecret(); await refresh(); }
         });
         return row;
@@ -56,6 +62,6 @@
     if(d.reader_adapter==='network') Object.assign(config,{network_host:'REPLACE_WITH_READER_HOST',network_port:9000});
     el('reader-config-output').textContent=JSON.stringify(config,null,2);
   });
-  document.addEventListener('visibilitychange',()=>{if(visible()) refresh(); else clearTimeout(timer);});
+  document.addEventListener('visibilitychange',()=>{if(visible()) refresh(); else {clearTimeout(timer);clearSecret();}});
   window.Readers={load(lofts,races){generation++; options(el('reader-create').elements.loft_id,lofts,l=>l.name); options(el('reader-config-race'),races,r=>`${r.name} (${r.status})`); refresh();},stop(){clearTimeout(timer);generation++;clearSecret();},clear(){this.stop();devices=[];el('reader-list').replaceChildren();el('reader-status').textContent='';el('reader-config-output').textContent='';el('reader-create').reset();for(const s of [el('reader-create').elements.loft_id,el('reader-config-device'),el('reader-config-race')]) s.replaceChildren();}};
 })();

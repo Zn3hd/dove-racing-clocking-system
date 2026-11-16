@@ -24,6 +24,7 @@ from .routers.manual_clocking import router as manual_clocking_router
 from .routers.sms_clocking import router as sms_clocking_router
 from .routers.messenger_clocking import router as messenger_clocking_router
 from .routers.member_dashboard import router as member_dashboard_router
+from .routers.reader_enrollment import router as reader_enrollment_router
 
 app = FastAPI(title="Pigeon Racing Clocking System API", version="0.2.0")
 
@@ -87,6 +88,7 @@ def calculate_flight(payload: FlightCalculation):
 
 
 app.include_router(clubs_router)
+app.include_router(reader_enrollment_router)
 app.include_router(races_router)
 app.include_router(entries_router)
 app.include_router(auth_router)

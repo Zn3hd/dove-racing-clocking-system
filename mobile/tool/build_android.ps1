@@ -12,6 +12,8 @@ $buildRoot = Join-Path $repo ('.pytest-tmp-android-' + [guid]::NewGuid().ToStrin
 if (!(Test-Path -LiteralPath $FlutterPath)) { throw 'Flutter SDK not found. Supply -FlutterPath.' }
 New-Item -ItemType Directory -Path $buildRoot | Out-Null
 Copy-Item -LiteralPath (Join-Path $source 'pubspec.yaml') -Destination $buildRoot
+Copy-Item -LiteralPath (Join-Path $source 'pubspec.lock') -Destination $buildRoot
+Copy-Item -LiteralPath (Join-Path $source 'analysis_options.yaml') -Destination $buildRoot
 foreach ($folder in @('lib','test')) { Copy-Item -LiteralPath (Join-Path $source $folder) -Destination $buildRoot -Recurse }
 $env:CI = 'true'
 $env:FLUTTER_SUPPRESS_ANALYTICS = 'true'
@@ -22,6 +24,8 @@ function Invoke-Flutter([string[]]$Arguments) {
 Push-Location $buildRoot
 try {
     Invoke-Flutter -Arguments @('create','--project-name','dove_racing_mobile','--platforms','android','--no-pub','.')
+    # Scaffold generation may replace the lockfile; restore the reviewed graph.
+    Copy-Item -LiteralPath (Join-Path $source 'pubspec.lock') -Destination $buildRoot -Force
     if ($GradleArchive) {
         $archive = (Resolve-Path -LiteralPath $GradleArchive).Path
         if ($GradleSha256 -notmatch '^[a-fA-F0-9]{64}$' -or
@@ -49,7 +53,7 @@ try {
     $manifest.manifest.application.SetAttribute('allowBackup',$ns,'false')
     $manifest.manifest.application.SetAttribute('usesCleartextTraffic',$ns,'false')
     $manifest.Save($manifestPath)
-    Invoke-Flutter -Arguments @('pub','get')
+    Invoke-Flutter -Arguments @('pub','get','--enforce-lockfile')
     Invoke-Flutter -Arguments @('analyze')
     Invoke-Flutter -Arguments @('test')
     $buildArgs = @('build','apk','--debug','--target-platform','android-arm64',"--dart-define=API_BASE_URL=$ApiUrl")

@@ -30,10 +30,10 @@ def signing_key() -> str:
         raise HTTPException(503, "JWT_SECRET_KEY must be set to a strong random value (48+ characters)")
     return key
 
-def issue_token(user_id: UUID) -> str:
+def issue_token(user_id: UUID, session_version: int = 0) -> str:
     now = datetime.now(timezone.utc)
     return jwt.encode({"sub": str(user_id), "iat": now, "exp": now + timedelta(minutes=30),
-                       "iss": "dove-racing"}, signing_key(), algorithm=ALGORITHM)
+                       "iss": "dove-racing", "sv": session_version}, signing_key(), algorithm=ALGORITHM)
 
 def require_bearer(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)) -> HTTPAuthorizationCredentials:
     if credentials is None or credentials.scheme.lower() != "bearer":
@@ -44,14 +44,18 @@ def current_user(credentials: HTTPAuthorizationCredentials = Depends(require_bea
                  db: Session = Depends(get_db)) -> dict:
     try:
         claims = jwt.decode(credentials.credentials, signing_key(), algorithms=[ALGORITHM],
-                            issuer="dove-racing", options={"require": ["sub", "exp", "iat", "iss"]})
+                            issuer="dove-racing", options={"require": ["sub", "exp", "iat", "iss", "sv"]})
         user_id = UUID(claims["sub"])
+        if type(claims["sv"]) is not int or claims["sv"] < 0:
+            raise ValueError("Invalid session version")
     except (InvalidTokenError, ValueError, KeyError, TypeError) as exc:
         raise HTTPException(401, "Invalid or expired token") from exc
-    row = db.execute(text("SELECT id,role_code,status,full_name,email FROM users WHERE id=:id"),
+    row = db.execute(text("SELECT id,role_code,status,full_name,email,session_version FROM users WHERE id=:id"),
                      {"id": user_id}).mappings().first()
     if not row or row["status"] != "active":
         raise HTTPException(401, "Account inactive or unavailable")
+    if claims["sv"] != row["session_version"]:
+        raise HTTPException(401, "Session revoked. Sign in again")
     result = dict(row)
     db.rollback()  # close read-only implicit transaction before write endpoints begin
     return result
