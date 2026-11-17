@@ -116,6 +116,7 @@ body[data-surface=admin]:has(#live-view:not([hidden])) .main-shell{background:#f
 
 body[data-surface=admin] .workspace:has(#live-view:not([hidden])) .topbar{position:static;right:auto;top:auto;width:auto;max-width:none;background:#fff;z-index:auto;border-bottom:1px solid #dfe6ef}
 @media(min-width:1101px){
+ body[data-surface=admin] .workspace:has(#live-view:not([hidden])) .content:has(>#notice:not([hidden])){padding-top:20px}
  body[data-surface=admin] .workspace:has(#live-view:not([hidden])) .topbar{position:fixed;left:16px;bottom:22px;top:auto;right:auto;width:168px;min-height:0;padding:0;background:#122447;border:0;z-index:5}
  body[data-surface=admin]:has(#live-view:not([hidden])) .sidebar-bottom{display:none}
  body[data-surface=admin]:has(#live-view:not([hidden])) .account{display:grid;gap:8px;width:100%}

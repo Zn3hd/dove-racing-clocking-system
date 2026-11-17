@@ -141,7 +141,12 @@ def test_reader_queue_restart_retry_and_browser_arrival(live_server, mode):
                 notice_box = admin.locator('#notice').bounding_box()
                 account_box = admin.locator('.topbar').bounding_box()
                 assert notice_box and account_box
-                assert notice_box['y'] >= account_box['y'] + account_box['height']
+                # Account controls now live in the desktop navigation footer.
+                # Verify the original requirement (no overlap) in either layout.
+                assert (notice_box['x'] >= account_box['x'] + account_box['width'] or
+                        account_box['x'] >= notice_box['x'] + notice_box['width'] or
+                        notice_box['y'] >= account_box['y'] + account_box['height'] or
+                        account_box['y'] >= notice_box['y'] + notice_box['height'])
                 admin.screenshot(path=str(server['artifacts'] / (mode + '-admin-arrival.png')), full_page=True)
                 member_page = browser.new_page(viewport={'width': 390, 'height': 844})
                 member_page.on('pageerror', lambda error: errors.append(str(error)))
