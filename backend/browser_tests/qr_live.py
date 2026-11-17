@@ -283,7 +283,9 @@ def test_real_browser_guest_qr_to_reviewed_standings(live_server, capture):
             assert event['metadata']['capture_mode'] == 'operator'
             assert not event['blocking_flags']
             assert issued['token'] not in json.dumps(event['metadata'])
-            assert ok(api.get(f'/races/{race}/live', headers=headers))['entries'] == []
+            pending_snapshot = ok(api.get(f'/races/{race}/live', headers=headers))
+            assert pending_snapshot['entries'] == []
+            assert pending_snapshot['pending_reviews'] == 1
             admin.locator('#operations-nav').click()
             admin.locator('#ops-event').select_option(event['id'])
             admin.locator('#ops-review [name=reason]').fill('Synthetic browser audit evidence reviewed')
@@ -299,6 +301,8 @@ def test_real_browser_guest_qr_to_reviewed_standings(live_server, capture):
             admin.locator('#live-nav').click()
             expect(admin.locator('#live-rows')).to_contain_text(ring, timeout=10000)
             expect(admin.locator('#live-arrived')).to_have_text('1')
+            expect(admin.locator('#command-pending')).to_have_text('0')
+            expect(admin.locator('#command-activity-list')).to_contain_text('Review approved')
             standings = ok(api.get(f'/races/{race}/live', headers=headers))
             row = standings['entries'][0]
             assert standings['official'] is False and row['rank'] == 1 and row['leaderboard'] == 'guest'

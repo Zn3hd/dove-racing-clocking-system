@@ -6,6 +6,7 @@ Set BROWSER_EXECUTABLE to the installed Microsoft Edge executable.
 from http.server import ThreadingHTTPServer
 from threading import Thread
 
+import re
 import pytest
 from playwright.sync_api import expect
 from qr_browser import page
@@ -106,3 +107,50 @@ def test_untrusted_evidence_is_text_and_writes_are_disabled(page, preview):
     expect(page.locator('#live-rows')).to_contain_text('<img src=x onerror=alert(1)>')
     response = page.request.post(preview.replace('/dashboard/', '/races'), data={})
     assert response.status == 405
+
+
+def test_command_center_summary_stable_rows_and_stale_state(page, preview):
+    page.goto(preview)
+    expect(page.locator('#live-rows tr')).to_have_count(7)
+    expect(page.locator('#command-pending')).to_have_text('3')
+    expect(page.locator('#race-top-speed')).to_have_text('1,284.50')
+    expect(page.locator('#command-activity-list li')).to_have_count(3)
+    assert page.locator('#live-total').count() == 1
+    assert page.locator('.command-kpis article').count() == 5
+    page.evaluate("""() => {
+        window.originalRaceRow=document.querySelector('#live-rows tr');
+        renderLive({...insightSnapshot, pending_reviews:0, pending_flagged_reviews:0, oldest_pending_at:null});
+    }""")
+    assert page.evaluate("window.originalRaceRow === document.querySelector('#live-rows tr')")
+    expect(page.locator('#command-review-age')).to_contain_text('Review queue clear')
+    page.evaluate('CommandCenter.connection(false)')
+    expect(page.locator('#live-updated')).to_contain_text('Updates delayed')
+    page.evaluate('CommandCenter.reset()')
+    expect(page.locator('#command-activity-list li')).to_have_count(0)
+    expect(page.locator('#command-pending')).to_have_text('—')
+
+
+def test_new_rows_have_one_time_highlight_and_no_simulator_medal(page, preview):
+    page.goto(preview)
+    expect(page.locator('#live-rows tr')).to_have_count(7)
+    expect(page.locator('#live-rows .recent-arrival')).to_have_count(0)
+    page.evaluate("""() => {
+        const row={...insightSnapshot.entries[0], entry_id:'new-arrival', rank:1};
+        renderLive({...insightSnapshot, entries:[...insightSnapshot.entries,row]});
+    }""")
+    expect(page.locator('#live-rows .recent-arrival')).to_have_count(1)
+    page.evaluate('renderLive(insightSnapshot)')
+    expect(page.locator('#live-rows .recent-arrival')).to_have_count(1)
+    expect(page.locator('.simulated-row')).not_to_have_class(re.compile('podium-'))
+
+
+def test_activity_values_are_text_and_unknown_totals_are_not_zero(page, preview):
+    page.goto(preview)
+    expect(page.locator('#live-rows tr')).to_have_count(7)
+    page.evaluate("""() => renderLive({...insightSnapshot, pending_reviews:undefined,
+      arrival_rate_per_minute:null, recent_activity:[{activity_id:'unsafe',kind:'review',decision:'approve',
+      occurred_at:'2026-11-17T00:00:00Z',reviewer:'<img src=x onerror=alert(1)>',official_ring_number:'<script>bad()</script>'}]})""")
+    expect(page.locator('#command-pending')).to_have_text('—')
+    expect(page.locator('#command-rate')).to_contain_text('unavailable')
+    expect(page.locator('#command-activity-list img, #command-activity-list script')).to_have_count(0)
+    expect(page.locator('#command-activity-list')).to_contain_text('<script>bad()</script>')

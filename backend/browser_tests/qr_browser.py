@@ -56,7 +56,7 @@ def serve(page, *, lost_response=False, guest=True, rate_limited=False):
         elif path.startswith('/dashboard/'):
             file = (ASSETS / path.removeprefix('/dashboard/')).resolve()
             assert file.is_relative_to(ASSETS)
-            kind = {'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css'}.get(file.suffix, 'text/plain')
+            kind = {'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml'}.get(file.suffix, 'text/plain')
             route.fulfill(status=200, content_type=kind, body=file.read_bytes())
             return
         else:

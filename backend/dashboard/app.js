@@ -366,6 +366,7 @@ function renderInsights(data) {
 }
 $("#insight-leader-mode").addEventListener("change", () => { if (insightSnapshot) renderInsights(insightSnapshot); });
 function resetLive(text) {
+  window.CommandCenter?.reset();
   insightSnapshot = null;
   $("#telemetry-race").textContent = "Select a race";
   $("#telemetry-status").textContent = "—";
@@ -433,14 +434,14 @@ function renderLive(data) {
   const raceLabel = $("#live-race").selectedOptions[0]?.textContent || data.race_name || "Selected race";
   $("#race-hero-title").textContent = data.race_name || raceLabel;
   $("#race-hero-subtitle").textContent = data.release_at
-    ? "Released " + new Date(data.release_at).toLocaleString() + " · " + (data.official ? "Official" : "Provisional clocking")
+    ? "Released " + new Date(data.release_at).toLocaleString("en-PH", {timeZone:"Asia/Manila",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:false}) + " PHT · " + (data.official ? "Official" : "Provisional clocking")
     : "Not released · waiting for eligible arrivals";
   const remaining = Math.max(0, Number(data.registered_entries) - Number(data.arrived_entries));
   const percentage = data.registered_entries ? 100 * data.arrived_entries / data.registered_entries : 0;
   $("#race-in-transit").textContent = String(remaining);
   $("#race-arrived-percent").textContent = percentage.toFixed(1) + "% of registered pigeons";
-  const observed = data.entries.map(row => Number(row.display_speed)).filter(Number.isFinite);
-  $("#race-top-speed").textContent = observed.length ? Math.max(...observed).toLocaleString(undefined, {maximumFractionDigits: 2}) : "—";
+  const observed = data.entries.filter(row => row.capture_mode !== "simulated" && row.rank !== null).map(row => Number(row.display_speed)).filter(Number.isFinite);
+  $("#race-top-speed").textContent = observed.length ? Math.max(...observed).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : "—";
   $("#race-speed-unit").textContent = (data.speed_unit || "m/min") + " · observed, provisional";
   $("#race-participants").textContent = data.active_participants == null ? "—" : String(data.active_participants);
   renderInsights(data);
@@ -461,10 +462,13 @@ function renderLive(data) {
   $("#live-total").textContent = String(data.registered_entries);
   $("#live-arrived").textContent = String(data.arrived_entries);
   $("#live-status").textContent = data.race_status;
-  $("#live-release").textContent = data.release_at ? `Released ${new Date(data.release_at).toLocaleString()}` : "Not released";
+  $("#live-release").textContent = "Registered race entries";
   $("#live-updated").textContent = `Updated ${new Date(data.updated_at).toLocaleTimeString()}`;
   const body = $("#live-rows");
-  body.replaceChildren();
+  const previous = new Map([...body.children].map(row => [row.dataset.entryKey, row]));
+  const hadRows = previous.size > 0;
+  const scroll = body.closest('.table-wrap');
+  const scrollTop = scroll.scrollTop, scrollLeft = scroll.scrollLeft;
   for (const row of data.entries) {
     const tr = element("tr", row.capture_mode === "simulated" ? "simulated-row" : "");
     const rank = element("td");
@@ -474,7 +478,8 @@ function renderLive(data) {
     bird.append(element("span", "person-name", row.official_ring_number), element("span", "person-email", row.owner_name));
     const arrival = element("td");
     arrival.append(element("span", "person-name", `Arrival #${row.arrival_order}`),
-      element("span", "person-email", new Date(row.arrival_at).toLocaleString()));
+      element("span", "person-email", new Date(row.arrival_at).toLocaleTimeString("en-PH", {timeZone:"Asia/Manila",hour12:false}) + " PHT"));
+    arrival.title = new Date(row.arrival_at).toLocaleString("en-PH", {timeZone:"Asia/Manila"}) + " PHT";
     const evidence = element("td");
     const capture = row.capture_mode === "simulated" ? "Simulated" : row.capture_mode === "automatic" ? "Auto (declared)" : row.capture_mode === "operator" ? "Operator scan" : row.capture_mode === "manual" ? "Manual" : "Unknown capture";
     const badges = element("div", "evidence-labels");
@@ -482,16 +487,32 @@ function renderLive(data) {
       element("span", `evidence-badge ${row.reviewed ? "evidence-reviewed" : "evidence-pending"}`, row.reviewed ? "Reviewed" : "Unreviewed"));
     evidence.append(badges, element("span", "person-email", `${row.clocking_method} · ${row.offline_buffered ? "Buffered · " : ""}server receipt time`));
     tr.append(rank, bird, arrival, element("td", "", `${(row.distance_meters / 1000).toFixed(3)} km`),
-      element("td", "", `${row.display_speed.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${data.speed_unit}`), evidence);
+      element("td", "", `${row.display_speed.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${data.speed_unit}`), evidence);
     tr.setAttribute("role", "row");
     ["Rank / group", "Pigeon / owner", "Arrival order / time", "Distance", "Speed", "Evidence"].forEach((label, index) => {
       tr.children[index].dataset.label = label;
       tr.children[index].setAttribute("role", "cell");
     });
-    body.append(tr);
+    const key = String(row.entry_id);
+    tr.dataset.entryKey = key;
+    if (row.capture_mode !== 'simulated' && row.rank >= 1 && row.rank <= 3) tr.classList.add('podium-' + row.rank);
+    const old = previous.get(key);
+    if (old) {
+      previous.delete(key);
+      if (old.innerHTML !== tr.innerHTML) old.replaceChildren(...tr.childNodes);
+      const fresh = Date.now() - Number(old.dataset.firstSeen || 0) < 8000;
+      old.className = tr.className + (fresh ? ' recent-arrival' : '');
+      body.append(old);
+    } else {
+      if (hadRows) { tr.dataset.firstSeen = String(Date.now()); tr.classList.add('recent-arrival'); }
+      body.append(tr);
+    }
   }
+  for (const old of previous.values()) old.remove();
+  scroll.scrollTop = scrollTop; scroll.scrollLeft = scrollLeft;
   $("#live-state").hidden = data.entries.length > 0;
   $("#live-state").textContent = data.release_at ? "Waiting for eligible arrivals. Unreviewed operator/manual scans are excluded." : "This race has not been released.";
+  window.CommandCenter?.update(data);
   $("#live-feed-state").textContent = data.possibly_truncated ? "Showing the first 1,000 eligible entries" : "Connected · refreshes every 3 seconds";
 }
 
@@ -503,6 +524,7 @@ async function pollLive(version = live.version) {
   } catch (error) {
     if (error.name !== "AbortError" && version === live.version) {
       // Keep last received rows visible but explicitly mark them stale.
+      window.CommandCenter?.connection(false);
       $("#live-feed-state").textContent = `Not synchronized · showing last received data. ${error.message}`;
     }
   } finally {

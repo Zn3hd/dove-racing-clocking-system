@@ -8,10 +8,13 @@
   <link rel="stylesheet" href="/dashboard/styles.css">
   <link rel="stylesheet" href="/dashboard/workspace.css">
   <link rel="stylesheet" href="/dashboard/interface.css">
+  <link rel="stylesheet" href="/dashboard/command-center.css">
   <script src="/dashboard/interface.js" defer></script>
   <script src="/dashboard/app.js" defer></script>
+  <script src="/dashboard/command-center.js" defer></script>
   <script src="/dashboard/operations.js" defer></script>
   <script src="/dashboard/readers.js" defer></script>
+  <script src="/dashboard/icons.js" defer></script>
 </head>
 <body data-surface="admin">
   <noscript>This dashboard requires JavaScript. Enable JavaScript to sign in and manage your club.</noscript>
@@ -19,7 +22,7 @@
     <a class="skip-link" href="#login-form">Skip to sign in</a>
     <div class="login-story">
       <a class="brand" href="/dashboard/"><span class="brand-mark" aria-hidden="true">P</span><span>PIGEON RACING<small>CLOCKING SYSTEM</small></span></a>
-      <div class="story-copy"><p class="eyebrow">FROM THE LOFT TO THE FINISH</p><h1>A clear view<br>of your club.</h1><p>Your members, your community, and the foundation for every race. Manage it all from one place.</p></div>
+      <div class="story-copy"><p class="eyebrow">FROM THE LOFT TO THE FINISH</p><h1>A clear view<br> of your club.</h1><p>Your members, your community, and the foundation for every race. Manage it all from one place.</p></div>
       <div class="flight-art" aria-hidden="true"><span class="orbit orbit-one"></span><span class="orbit orbit-two"></span><span class="bird">↗</span><span class="flight-label">READY FOR THE NEXT RELEASE</span></div>
       <p class="story-foot">Pigeon Racing Clocking System <span>Administrator workspace</span></p>
     </div>
@@ -51,7 +54,7 @@
         <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
         <section id="operations-view" hidden aria-label="Race operations"></section>
         <div id="members-view">
-        <section class="page-heading"><div><p class="eyebrow">YOUR RACING COMMUNITY</p><h1>Club members</h1><p class="muted" id="club-description">Manage the people behind every flight.</p></div><button id="add-member-button" class="primary" type="button" disabled>＋ Add member</button></section>
+        <section class="page-heading"><div><p class="eyebrow">YOUR RACING COMMUNITY</p><h1>Club members</h1><p class="muted" id="club-description">Manage the people behind every flight.</p></div><button id="add-member-button" class="primary" type="button" disabled>Add member</button></section>
         <section id="club-setup" class="setup-card" hidden><div class="setup-symbol" aria-hidden="true">↗</div><div><h2>Give your club a home.</h2><p>No club is assigned to this administrator. Create the first club to get started, or contact its administrator if one already exists.</p><button id="create-club-button" class="primary" type="button">Create racing club</button></div></section>
         <section class="stats" aria-label="Club statistics"><article><span>All participants</span><strong id="stat-total">—</strong><small>Members and guests</small></article><article><span>Active members</span><strong id="stat-members">—</strong><small>Registered club members</small></article><article><span>Active guests</span><strong id="stat-guests">—</strong><small>Guest participants</small></article></section>
         <section class="members-card" aria-labelledby="directory-heading"><div class="directory-header"><div><h2 id="directory-heading">Member directory <span id="directory-count" class="count">0</span></h2><p class="muted">Keep your club's contact details up to date.</p></div><button id="assign-button" class="outline small" type="button" disabled>Link existing account</button></div>
@@ -62,17 +65,24 @@
         </section>
         </div>
         <section id="live-view" hidden aria-labelledby="live-heading">
-          <div class="page-heading race-page-heading"><div><p class="eyebrow">RACE WORKSPACE</p><h1 id="live-heading">Race Command Center</h1><p class="muted">Live arrivals and provisional standings for your selected race.</p></div><span class="evidence-badge evidence-provisional">Provisional</span></div>
-          <div class="race-toolbar"><div class="live-controls"><label>Selected race<select id="live-race"><option value="">Select a race</option></select></label><button id="reload-races" class="outline" type="button">Reload races</button></div><div class="race-context"><strong id="race-hero-title">Select a race to begin</strong><span id="race-hero-subtitle">Waiting for race details</span><span class="race-sync"><span id="live-status" class="race-status">—</span> · <span id="live-updated">Not synchronized</span></span></div></div>
+          <header class="command-hero">
+            <div class="command-title"><p class="eyebrow">RACE COMMAND CENTER</p><div class="command-title-line"><h1 id="live-heading"><span id="race-hero-title">Select a race</span></h1><span id="live-status" class="command-status">—</span></div><p id="race-hero-subtitle" class="muted">Waiting for race details</p></div>
+            <div class="command-selector live-controls"><label>Selected race<select id="live-race"><option value="">Select a race</option></select></label><button id="reload-races" class="outline" type="button">Reload races</button></div>
+            <div class="command-meta"><span id="live-updated">Not synchronized</span><span id="command-last-arrival">No eligible arrivals yet</span><span class="evidence-badge evidence-provisional">Provisional</span></div>
+          </header>
+          <section class="stats race-kpis command-kpis" aria-label="Selected race statistics"><article><span>Registered</span><strong id="live-total">—</strong><small id="live-release">Release not loaded</small></article><article><span>Arrived</span><strong id="live-arrived">—</strong><small id="race-arrived-percent">Eligible arrivals</small></article><article><span>In transit</span><strong id="race-in-transit">—</strong><small>No eligible arrival recorded</small></article><article><span>Top speed</span><strong id="race-top-speed">—</strong><small id="race-speed-unit">Observed · provisional</small></article><article class="pending-kpi"><span>Pending reviews</span><strong id="command-pending">—</strong><small id="command-pending-flags">Loading review summary</small></article></section>
+          <section class="command-progress" aria-label="Race progress"><strong id="command-progress-label">Arrival progress —</strong><progress id="command-progress" max="100" value="0" aria-label="Eligible arrival progress"></progress><span id="command-remaining">— remaining</span><span id="command-rate">Arrival rate unavailable</span><span><strong id="race-participants">—</strong> participants</span></section>
           <div class="race-workspace">
-            <aside class="stats race-kpis" aria-label="Selected race statistics"><article><span>Registered pigeons</span><strong id="live-total">—</strong><small id="live-release">Release not loaded</small></article><article><span>Arrived</span><strong id="live-arrived">—</strong><small id="race-arrived-percent">Eligible arrivals</small></article><article><span>In transit</span><strong id="race-in-transit">—</strong><small>Registered entries not arrived</small></article><article><span>Top observed speed</span><strong id="race-top-speed">—</strong><small id="race-speed-unit">Observed · provisional</small></article><article><span>Active participants</span><strong id="race-participants">—</strong><small>Owners with registered entries</small></article></aside>
             <div class="race-results">
           <section class="members-card standings-panel" aria-labelledby="standings-heading"><div class="directory-header"><div><h2 id="standings-heading">Live standings</h2><p class="muted">Speed determines rank; arrival order is recorded separately.</p></div></div>
             <p class="standings-scroll-note" id="standings-scroll-note">Scroll the table horizontally to see all columns.</p><div class="table-wrap" role="region" aria-describedby="standings-scroll-note" aria-label="Live standings table" tabindex="0"><table role="table"><thead role="rowgroup"><tr role="row"><th scope="col">Rank / group</th><th scope="col">Pigeon / owner</th><th scope="col">Arrival order / time</th><th scope="col">Distance</th><th scope="col">Speed</th><th scope="col">Evidence</th></tr></thead><tbody id="live-rows" role="rowgroup"></tbody></table></div>
             <div id="live-state" class="directory-state" role="status">Select a race to see its arrivals.</div>
             <footer class="directory-footer"><span id="live-feed-state" role="status" aria-live="polite">No race selected</span><span>Official finalization is disabled</span></footer>
           </section>
-              <div class="race-actions"><p>Official finalization is disabled.</p><button id="review-arrival-evidence" class="primary" type="button">Review arrival evidence</button></div>
+            </div>
+            <aside class="command-activity" aria-labelledby="command-activity-heading"><div class="command-section-heading"><h2 id="command-activity-heading">Activity feed</h2><span>Latest 24</span></div><p id="command-activity-state" class="muted">Waiting for race activity</p><ol id="command-activity-list"></ol></aside>
+          </div>
+              <div class="race-actions command-review"><div><h2>Pending review <span id="command-review-count">—</span></h2><p id="command-review-age">Select a race to load the review queue.</p></div><button id="review-arrival-evidence" class="primary" type="button">Review arrival evidence</button></div>
               <details class="race-disclosure"><summary>Race details and top competitors</summary>
           <div class="race-insights">
             <section class="members-card race-insight-card" aria-labelledby="telemetry-heading">
@@ -99,8 +109,6 @@
           <section class="members-card validation-card" aria-labelledby="validation-heading"><div class="directory-header"><div><h2 id="validation-heading">Arrival validation</h2><p id="validation-summary" class="muted">Select a race to inspect clocking evidence.</p></div></div><div class="table-wrap"><table><thead><tr><th scope="col">Pigeon</th><th scope="col">Blocking flags</th><th scope="col">Calculated speed</th><th scope="col">Received</th></tr></thead><tbody id="validation-rows"></tbody></table></div><p id="validation-empty" class="directory-state">No validation data loaded.</p><footer class="directory-footer">Flagged evidence is retained but excluded from rankings. Review approval cannot override these blocks.</footer></section>
               </details>
               <p class="timing-note">Timing uses server receipt, including buffered uploads. Automatic capture is device-declared. Operator/manual scans require review. Simulated scans can appear in this provisional test preview; they are never official results.</p>
-            </div>
-          </div>
         </section>
         <p class="workspace-foot">PIGEON RACING CLOCKING SYSTEM <span>Built around your club. Ready for the next flight.</span></p>
       </main>

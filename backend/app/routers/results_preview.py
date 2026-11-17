@@ -5,13 +5,14 @@ arrival per entry wins; unreviewed and rejected events are excluded.
 This endpoint never writes to race_results or finalizes a race.
 """
 from uuid import UUID
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from ..club_access import require_race_admin
 from ..database import get_db
 from ..calculations import speed_mpm, convert_speed, leaderboard
+from ..race_operations import operations_summary
 
 router = APIRouter(prefix="/races", tags=["results-preview"])
 
@@ -77,10 +78,18 @@ def live_race(race_id: UUID, db: Session = Depends(get_db),
             ('guest' if row['clocking_method'] == 'QR' else 'member')))
     rows.sort(key=lambda row: (row['leaderboard'], row['rank'] is None, row['rank'] or 0, row['arrival_order']))
     validation = validation_summary(db, race_id)
+    snapshot_at = datetime.now(timezone.utc)
+    real_arrivals = [row for row in rows if row['capture_mode'] != 'simulated']
+    complete = len(rows) < 1000
     return {'race_id': race_id, 'race_name': race['name'], 'race_status': race['status'],
+            **operations_summary(db, race_id),
+            'last_eligible_arrival_at': max((row['arrival_at'] for row in real_arrivals), default=None) if complete else None,
+            'arrival_rate_per_minute': sum(snapshot_at-timedelta(minutes=5) < row['arrival_at'] <= snapshot_at
+                for row in real_arrivals) / 5 if complete and race['actual_release_at'] is not None else None,
+            'arrival_rate_window_minutes': 5,
             'maximum_speed_mpm': float(race['maximum_speed_mpm']), **validation,
             'release_at': race['actual_release_at'], 'official': False,
-            'updated_at': datetime.now(timezone.utc), 'speed_unit': race['display_speed_unit'],
+            'updated_at': snapshot_at, 'speed_unit': race['display_speed_unit'],
             'registered_entries': total, 'active_participants': active_participants,
             'arrived_entries': len(rows), 'limit': 1000,
             'possibly_truncated': len(rows) == 1000, 'entries': rows,

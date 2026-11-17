@@ -5,7 +5,7 @@ The demo bootstrap is injected by this loopback-only server, never shipped in ap
 """
 import argparse
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -21,7 +21,7 @@ ENTRIES = [dict(entry_id=f'entry-{i}', pigeon_id=f'pigeon-{i}', loft_id=f'loft-{
                 qualifying_status='below_minimum' if i == 7 else 'qualified',
                 verification_status='provisional', leaderboard='member',
                 rank=None if i == 7 else i, arrival_order=i+2,
-                arrival_at=f'2026-11-07T00:{26+i:02}:10+00:00',
+                arrival_at=f'2026-11-17T00:{26+i:02}:10+00:00',
                 distance_meters=187000, display_speed=speed, speed_mpm=speed)
            for i, (name, speed) in enumerate([
                ('Amihan Loft', 1284.50), ('Northern Loft', 1282.36),
@@ -32,14 +32,20 @@ ENTRIES = [dict(entry_id=f'entry-{i}', pigeon_id=f'pigeon-{i}', loft_id=f'loft-{
 
 def live_data():
     return dict(race_id=RACE, race_name=RACES[0]['name'], race_status='active',
-                release_at='2026-11-06T22:00:00+00:00', official=False,
+                release_at='2026-11-16T22:00:00+00:00', official=False,
                 registered_entries=120, arrived_entries=len(ENTRIES), active_participants=24,
                 speed_unit='m/min', updated_at=datetime.now(timezone.utc).isoformat(),
+                pending_reviews=3, pending_flagged_reviews=1, oldest_pending_at=(datetime.now(timezone.utc)-timedelta(minutes=14)).isoformat(),
+                last_eligible_arrival_at='2026-11-17T00:32:10+00:00', arrival_rate_per_minute=0.0,
+                recent_activity=[
+                    dict(activity_id='submission-demo',event_id='event-1',occurred_at='2026-11-17T00:32:10+00:00',kind='submission',official_ring_number='PH-26-135705',method='RFID',status='pending',capture_mode='automatic',blocking_flags=[]),
+                    dict(activity_id='review-demo',event_id='event-2',occurred_at='2026-11-17T00:31:20+00:00',kind='review',official_ring_number='PH-26-135702',method='RFID',decision='approve',reviewer='Demo official',blocking_flags=[]),
+                    dict(activity_id='flag-demo',event_id='event-3',occurred_at='2026-11-17T00:25:06+00:00',kind='validation',official_ring_number='PH-26-135952',method='RFID',blocking_flags=['exceeds_maximum_speed'])],
                 entries=ENTRIES, suspicious_events=1, repeat_scans=1, simulated_events=3,
                 maximum_speed_mpm=3000, possibly_truncated=False,
                 flagged_events=[dict(official_ring_number='PH-26-135952',
                                      blocking_flags=['exceeds_maximum_speed'], speed_mpm=3540,
-                                     received_at='2026-11-07T00:25:06+00:00')])
+                                     received_at='2026-11-17T00:25:06+00:00')])
 
 
 class PreviewHandler(SimpleHTTPRequestHandler):
