@@ -82,3 +82,9 @@
 - e6f7b36 Update QR browser test for reader invitation revocation control
 - d4ac970 Pin Flutter CI to the locally validated SDK version
 - 58bb32e Add secure owner reader enrollment and durable mobile clocking pilot
+
+## 2026-11-18 (Asia/Manila)
+
+- a37d534 Verify notification separation in Flight Deck layout
+- bae89f0 Build Flight Deck live race command center
+- f6ad4f6 Polish responsive web frontend and QR arrival workflow
