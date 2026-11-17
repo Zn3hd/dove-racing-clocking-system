@@ -1,14 +1,14 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light"><title>My Pigeons · Dove Racing</title>
-<link rel="stylesheet" href="/dashboard/member.css"></head>
-<body><main class="shell">
-<header><div class="member-brand"><span class="member-brand-icon" aria-hidden="true">P</span><div><strong>Dove Racing</strong><small>Clocking System</small></div></div><button id="signout" type="button" hidden>Sign out</button></header><div class="member-heading"><p class="eyebrow">RACE CENTER / MEMBER WORKSPACE</p><h1>Race Command Center</h1><p class="muted">Your pigeons, race activity and live performance.</p></div>
+<meta name="color-scheme" content="light"><title>My pigeons · Pigeon Racing</title>
+<link rel="stylesheet" href="/dashboard/member.css"><link rel="stylesheet" href="/dashboard/interface.css"><script src="/dashboard/interface.js" defer></script></head>
+<body data-surface="member"><a class="skip-link" href="#member-main">Skip to content</a><main class="shell" id="member-main" tabindex="-1">
+<header><div class="member-brand"><span class="member-brand-icon" aria-hidden="true">P</span><div><strong>Pigeon Racing</strong><small>Clocking System</small></div></div><button id="signout" type="button" hidden>Sign out</button></header><div class="member-heading"><p class="eyebrow">RACE CENTER / MEMBER WORKSPACE</p><h1>Race Command Center</h1><p class="muted">Your pigeons, race activity and live performance.</p></div>
 <section id="login-panel" class="panel"><h2>Member sign in</h2><form id="login-form">
 <label>Email <input name="email" type="email" autocomplete="username" required></label>
 <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
 <button type="submit">Sign in</button></form><p id="login-error" class="error" role="alert"></p>
-<p class="muted">Club administrators create member accounts. Administrator tools are not available here.</p></section>
+<p class="muted">Ask your club administrator to create your member account.</p><nav class="role-links" aria-label="Choose sign-in workspace"><a href="/dashboard/">Administrator</a><a href="/dashboard/member.html" aria-current="page">Member</a><a href="/dashboard/scan.html">Guest QR</a></nav></section>
 <div id="workspace" hidden>
 <div class="toolbar"><p id="welcome"></p><span id="sync-status" role="status">Connecting…</span><button id="refresh" type="button">Refresh</button></div><div class="member-race-selector"><label for="standings-race">Race</label><select id="standings-race"></select></div><section class="member-race-hero" aria-label="Selected race"><span class="member-live-pill">PROVISIONAL LIVE VIEW</span><h2 id="member-race-name">Select a race</h2><p id="member-race-release">Waiting for race data</p></section><div class="member-race-workspace"><aside class="member-race-kpis" aria-label="Selected race statistics"><article><span>Arrived</span><strong id="member-arrived">—</strong><small id="member-arrived-pct">Eligible arrivals</small></article><article><span>In transit</span><strong id="member-transit">—</strong><small>Registered pigeons not arrived</small></article><article><span>Top speed</span><strong id="member-top-speed">—</strong><small id="member-speed-unit">Observed · provisional</small></article><article><span>Active participants</span><strong id="member-participants">—</strong><small>Owners with registered entries</small></article></aside>
 <section class="panel leaderboard-panel"><div class="section-title"><div><p class="eyebrow">RACE INTELLIGENCE</p><h2>Live standings</h2></div><span class="provisional-tag">PROVISIONAL</span></div><p class="muted">Arrival order includes only eligible evidence after race release; rejected, blocked, and unreviewed manual scans are excluded. Arrival order is not final rank. Speed rankings remain provisional until official review and finalization.</p>

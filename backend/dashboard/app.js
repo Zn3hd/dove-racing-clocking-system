@@ -139,7 +139,17 @@ function renderPeople() {
     locationButton.setAttribute("aria-label", `Manage loft location for ${person.full_name}`);
     locationButton.addEventListener("click", () => openLocation(person, loft));
     actions.append(edit, locationButton);
-    row.append(personCell, roleCell, element("td", "", person.phone || "—"), gps, statusCell, actions);
+    const cells = [personCell, roleCell, element("td", "", person.phone || "—"), gps, statusCell, actions];
+    const labels = ["Participant", "Role", "Phone", "Loft location", "Status", "Actions"];
+    row.setAttribute("role", "row");
+    cells.forEach((cell, index) => {
+      cell.dataset.label = labels[index];
+      cell.setAttribute("role", "cell");
+    });
+    const actionWrap = element("div", "member-actions");
+    actionWrap.append(...actions.childNodes);
+    actions.append(actionWrap);
+    row.append(...cells);
     body.append(row);
   }
   $("#directory-count").textContent = String(state.people.length);

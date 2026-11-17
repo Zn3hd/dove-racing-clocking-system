@@ -1,6 +1,6 @@
 /* Device secrets stay in this one-time dialog, never browser storage or configuration. */
 (() => {
-  const host = document.createElement('section'); host.className='operation-card';
+  const host = document.createElement('section'); host.className='operation-card'; host.id='reader-setup';
   host.innerHTML=`<h2>Reader setup and live gateway monitoring</h2>
     <p class="field-help">Refreshes every 15 seconds while Race operations is visible. Recent heartbeat means the gateway reached the server within 90 seconds; it does not prove an antenna is working or certify an arrival.</p>
     <form id="reader-create"><div class="form-grid"><label>Loft<select name="loft_id" required></select></label><label>Unique reader name<input name="device_identifier" maxlength="200" required></label><label>Adapter<select name="reader_adapter"><option value="simulator">Simulator (test only)</option><option value="usb_hid">USB keyboard / HID</option><option value="serial">USB serial</option><option value="network">Network text protocol</option></select></label><label>Documented protocol label<input name="reader_protocol" maxlength="120" value="ascii-newline-v1" required></label></div><p class="field-help">Choose the reader's actual output protocol. Frequency alone does not establish compatibility. Only one active reader per loft is supported.</p><button class="primary" type="submit">Register reader</button></form>

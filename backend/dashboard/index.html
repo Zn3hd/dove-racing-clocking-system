@@ -7,13 +7,16 @@
   <title>Pigeon Racing Clocking System · Club administration</title>
   <link rel="stylesheet" href="/dashboard/styles.css">
   <link rel="stylesheet" href="/dashboard/workspace.css">
+  <link rel="stylesheet" href="/dashboard/interface.css">
+  <script src="/dashboard/interface.js" defer></script>
   <script src="/dashboard/app.js" defer></script>
   <script src="/dashboard/operations.js" defer></script>
   <script src="/dashboard/readers.js" defer></script>
 </head>
-<body>
+<body data-surface="admin">
   <noscript>This dashboard requires JavaScript. Enable JavaScript to sign in and manage your club.</noscript>
   <section id="login-screen" class="login-layout">
+    <a class="skip-link" href="#login-form">Skip to sign in</a>
     <div class="login-story">
       <a class="brand" href="/dashboard/"><span class="brand-mark" aria-hidden="true">P</span><span>PIGEON RACING<small>CLOCKING SYSTEM</small></span></a>
       <div class="story-copy"><p class="eyebrow">FROM THE LOFT TO THE FINISH</p><h1>A clear view<br>of your club.</h1><p>Your members, your community, and the foundation for every race. Manage it all from one place.</p></div>
@@ -28,12 +31,14 @@
           <p id="login-error" class="error" role="alert"></p>
           <button class="primary" type="submit">Sign in <span aria-hidden="true">→</span></button>
         </form>
-        <p class="login-note">Accounts are created by a club administrator. Contact your club if you need access. <a href="/dashboard/scan.html">Guest QR clocking →</a></p>
+        <p class="login-note">Accounts are created by a club administrator. Contact your club if you need access.</p>
+        <nav class="role-links" aria-label="Sign-in options"><a href="/dashboard/" aria-current="page">Administrator</a><a href="/dashboard/member.html">Member</a><a href="/dashboard/scan.html">Guest QR</a></nav>
       </div>
     </main>
   </section>
 
   <div id="workspace" class="workspace" hidden>
+    <a class="skip-link" href="#workspace-content">Skip to content</a>
     <aside class="sidebar">
       <a class="brand" href="/dashboard/"><span class="brand-mark" aria-hidden="true">P</span><span>PIGEON RACING<small>CLOCKING SYSTEM</small></span></a>
       <div class="club-label"><span class="eyebrow">YOUR CLUB</span><strong id="sidebar-club">Club workspace</strong></div>
@@ -42,7 +47,7 @@
     </aside>
     <div class="main-shell">
       <header class="topbar"><span>Club administration <span class="crumb">/ Members</span></span><div class="account"><span id="account-name"></span><button id="password-button" class="text-button" type="button">Change password</button><button id="logout-button" class="outline small" type="button">Sign out</button></div></header>
-      <main class="content">
+      <main id="workspace-content" class="content" tabindex="-1">
         <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
         <section id="operations-view" hidden aria-label="Race operations"></section>
         <div id="members-view">

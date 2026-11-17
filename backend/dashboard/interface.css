@@ -1,0 +1,107 @@
+/* Final pilot interface: shared foundations for admin, member and guest flows. */
+:root{--ink:#122447;--muted:#53627a;--line:#dce3ef;--blue:#326dd1;--surface:#f5f7fc;--lavender:#f0edfb;--focus:#245bb8}
+html{scroll-padding-top:100px}
+body{color:var(--ink)}
+a{color:#245bb8;text-underline-offset:3px}
+button,input,select,textarea{font:inherit}
+button,a,input,select,textarea,summary{-webkit-tap-highlight-color:transparent}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+button:disabled{cursor:not-allowed}
+input,select,textarea{max-width:100%}
+textarea{resize:vertical}
+.skip-link{position:fixed;left:16px;top:12px;z-index:10000;transform:translateY(-200%);padding:12px 18px;background:#fff;color:var(--ink);border:2px solid var(--focus);border-radius:6px}
+.skip-link:focus{transform:translateY(0)}
+.role-links{display:flex;gap:6px;flex-wrap:wrap;margin:24px 0 0;padding:16px 0 0;border-top:1px solid var(--line)}
+.role-links a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:8px 12px;color:var(--muted);font-size:13px;line-height:1.4;text-decoration:none;border-radius:6px}
+.role-links a:hover{background:#edf2fc;color:var(--ink)}
+.role-links a[aria-current=page]{background:#e9effc;color:#204f9c;font-weight:700}
+.visibility-control{display:flex!important;align-items:center;gap:9px;min-height:40px;width:fit-content;margin:0!important;font-size:13px;font-weight:500;cursor:pointer;color:var(--muted)}
+.visibility-control input{appearance:auto;display:inline-block;width:18px!important;height:18px;min-height:18px;margin:0!important;accent-color:var(--blue)}
+.login-story{background:#122447}
+.login-panel .login-note{color:var(--muted);font-size:13px;line-height:1.7}
+.login-panel form{display:grid;gap:16px}
+.login-panel form>label{margin:0}
+.login-panel #login-error:empty{display:none}
+body[data-surface=member] #login-panel{max-width:480px;margin:28px auto 60px;padding:30px;border-radius:12px}
+body[data-surface=member]:has(#workspace[hidden]) .shell{max-width:1100px}
+body[data-surface=member]:has(#workspace[hidden]) .member-heading{max-width:640px;margin:30px auto;text-align:center}
+body[data-surface=member] #login-panel h2{font-size:24px;letter-spacing:-.5px}
+body[data-surface=member] #login-form{display:grid;gap:16px}
+body[data-surface=member] #login-form>label{margin:0}
+body[data-surface=member] #login-form button{width:100%;min-height:46px}
+body[data-surface=member] #login-error:empty{display:none}
+body[data-surface=member] #login-panel>.muted{font-size:13px;line-height:1.7}
+body[data-surface=scan]{background:var(--surface)}
+.scan-shell{width:calc(100% - 32px);max-width:680px;margin:32px auto;padding:28px;border-color:var(--line);color:var(--ink);box-shadow:none}
+.scan-shell>.eyebrow{display:inline-block;color:#245bb8;font-size:11px;text-decoration:none;line-height:1.6}
+.scan-shell h1{font-size:32px;letter-spacing:-1px;margin:16px 0 8px}
+.scan-shell h2{font-size:20px}
+.scan-shell .muted,.scan-shell .field-help{color:var(--muted);font-size:14px;line-height:1.65}
+.scan-shell .scan-note{background:var(--lavender);color:#344465;border:0;font-size:13px;padding:12px 14px;line-height:1.6}
+.scan-shell label{font-size:14px;line-height:1.5}
+.scan-shell input,.scan-shell select{min-height:46px;font-size:16px;border:1px solid #bdc9dc;border-radius:7px}
+.scan-shell button{min-height:44px;font-size:14px;border-radius:7px}
+.scan-shell .primary{background:var(--blue);color:#fff}
+.scan-shell .outline{background:#fff;color:#24446e;border:1px solid #bdc9dc}
+.scan-shell form{gap:14px;margin:18px 0}
+.scan-shell form label{margin:0}
+.scan-shell form .field-help{margin:0}
+.scan-shell #scan-status:empty{display:none}
+.scan-shell #scan-status:not(:empty){padding:12px 14px;background:#edf3ff;border-left:3px solid var(--blue);border-radius:5px}
+.scan-shell #scan-status.error{background:#fff2f1;color:#a72b28;border-left-color:#a72b28}
+.scan-shell .scan-actions{margin:16px 0;gap:12px;flex-wrap:wrap}
+.scan-shell #scan-account{overflow-wrap:anywhere;min-width:0}
+.scan-shell .scan-camera-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.scan-shell .scan-camera-tools button{flex:1 1 160px}
+.scan-shell #scan-submit{width:100%;min-height:48px}
+.scan-shell .scan-recovery{border-top:1px solid var(--line);padding-top:18px;margin-top:24px}
+.scan-recovery .recovery-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.scan-recovery h2{font-size:17px;margin:0}
+.scan-recovery details{margin-top:12px;font-size:14px;color:var(--muted);line-height:1.7}
+.scan-recovery summary{cursor:pointer;min-height:40px;display:list-item;padding:8px 0;color:#245bb8;font-weight:650}
+.scan-recovery ul{padding-left:20px;overflow-wrap:anywhere;font-size:14px;line-height:1.6}
+.operations-nav{display:flex;gap:8px;overflow-x:auto;min-width:0;padding:12px 0;margin:-8px 0 20px;border-bottom:1px solid var(--line)}
+.operations-nav a{display:flex;align-items:center;justify-content:center;white-space:nowrap;min-height:44px;padding:10px 16px;border:1px solid var(--line);border-radius:7px;color:#24446e;background:#fff;text-decoration:none;font-size:14px}
+.operations-nav a:hover{background:#edf2fc;border-color:#a9bfdf}
+.operation-card{scroll-margin-top:100px}
+details.operation-card>summary{cursor:pointer;font-size:17px;font-weight:700;min-height:44px;line-height:1.5;padding:8px 0;color:var(--ink)}
+details.operation-card:not([open]){padding:12px 24px}
+.test-tools{border-style:dashed;background:#faf9fd}
+.test-tools[open]>div{padding-top:16px}
+.members-card,.members-card .table-wrap,.main-shell{min-width:0}
+.members-card .table-wrap{max-width:100%;overflow-x:auto}
+.member-actions{display:flex;gap:6px;flex-wrap:wrap}
+.member-actions .location-action{margin-left:0}
+@media(max-width:760px){
+  html{scroll-padding-top:80px}
+  .content{padding:24px 16px}
+  .content .stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .content .stats article{padding:16px 10px}
+  .content .stats span{font-size:12px;line-height:1.5}
+  .content .stats small{font-size:11px;line-height:1.5}
+  .members-card .table-wrap table{width:100%;min-width:0;display:block}
+  .members-card thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  #member-rows{display:block;padding:0 12px}
+  #member-rows tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 12px;padding:18px 4px;border-top:1px solid var(--line)}
+  #member-rows td{display:block;min-width:0;overflow-wrap:anywhere;padding:0;border:0;font-size:14px;white-space:normal}
+  #member-rows td::before{content:attr(data-label);display:block;font-size:12px;color:var(--muted);margin:0 0 5px;font-weight:500}
+  #member-rows td:first-child,#member-rows td:nth-child(4),#member-rows td:last-child{grid-column:1/-1}
+  #member-rows td:first-child::before{display:none}
+  #member-rows .person-cell{min-width:0;gap:10px}
+  #member-rows .person-cell>div{min-width:0}
+  #member-rows .person-email,#member-rows .loft-address{max-width:none;overflow-wrap:anywhere}
+  #member-rows .edit-button{min-height:44px;min-width:70px;font-size:14px}
+  .page-heading>.primary{font-size:13px;min-height:44px;padding:10px 12px}
+  input,select,textarea{font-size:16px!important}
+  .visibility-control{min-height:44px;font-size:14px}
+  .role-links{gap:4px}
+  .role-links a{padding:8px 9px;font-size:13px}
+  .scan-shell{margin:16px auto;width:calc(100% - 24px);padding:20px}
+  .scan-shell h1{font-size:28px}
+  .scan-shell>.muted{margin-bottom:14px}
+  body[data-surface=member] #login-panel{padding:22px;margin:24px auto 40px}
+  body[data-surface=member]:has(#workspace[hidden]) .member-heading{margin:24px auto;text-align:left}
+  .operations-nav{margin-top:0}
+  .operation-card{scroll-margin-top:80px}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
