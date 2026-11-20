@@ -52,3 +52,110 @@ def finalize_race(race_id: UUID, db: Session = Depends(get_db),
             "independent guest arrival verification, and acceptance rules "
             "have been implemented and tested."
         )
+
+
+# This is an informational preflight, not a certification decision.
+# A closed race is necessary but never sufficient for official publication.
+FINALIZATION_BLOCKERS = (
+    "Trusted, independently verifiable RFID arrival evidence is not yet implemented.",
+    "Independent guest arrival verification and acceptance rules are not yet complete.",
+    "End-to-end official result certification and regression tests are not yet complete.",
+)
+
+
+def finalization_readiness(status: str) -> dict:
+    """Expose explicit blockers without mistaking a closed race for an official race."""
+    blockers = list(FINALIZATION_BLOCKERS)
+    if status != "closed":
+        blockers.insert(0, "Race must be closed before finalization can be considered.")
+    return {
+        "race_status": status,
+        "ready": False,
+        "official": False,
+        "blockers": blockers,
+        "next_action": "Complete trusted evidence and acceptance controls before enabling finalization.",
+    }
+
+
+@router.get("/{race_id}/finalization-readiness")
+def get_finalization_readiness(
+    race_id: UUID,
+    db: Session = Depends(get_db),
+    actor: dict = Depends(require_race_admin),
+):
+    """Read-only, administrator-authorized explanation of why publishing is blocked."""
+    status = db.execute(
+        text("SELECT status FROM races WHERE id=:id"),
+        {"id": race_id},
+    ).scalar_one_or_none()
+    if status is None:
+        raise HTTPException(404, "Race not found")
+    # Advisory evidence inventory: never an authorization to publish results.
+    evidence = db.execute(text("""
+        SELECT
+            (SELECT count(*) FROM race_entries e
+             WHERE e.race_id=:id AND e.status='registered') AS registered_entries,
+            (SELECT count(*) FROM clocking_events c
+             JOIN race_entries e ON e.id=c.entry_id
+             WHERE e.race_id=:id AND e.status='registered') AS submitted_events,
+            (SELECT count(*) FROM clocking_events c
+             JOIN race_entries e ON e.id=c.entry_id
+             JOIN clocking_event_validation v ON v.event_id=c.id
+             WHERE e.race_id=:id AND e.status='registered'
+               AND cardinality(v.blocking_flags)>0) AS blocked_events,
+            (SELECT count(*) FROM clocking_events c
+             JOIN race_entries e ON e.id=c.entry_id
+             WHERE e.race_id=:id AND e.status='registered'
+               AND EXISTS (SELECT 1 FROM clocking_reviews cr
+                           WHERE cr.event_id=c.id AND cr.decision='approve')) AS approved_events,
+            (SELECT count(*) FROM guest_arrival_verifications gv
+             JOIN clocking_events c ON c.id=gv.event_id
+             JOIN race_entries e ON e.id=c.entry_id
+             WHERE e.race_id=:id AND e.status='registered'
+               AND gv.decision='confirmed') AS guest_physically_confirmed,
+            (SELECT count(*) FROM clocking_events c
+             JOIN race_entries e ON e.id=c.entry_id
+             WHERE e.race_id=:id AND e.status='registered'
+               AND c.metadata->>'simulated'='true') AS simulated_events,
+            (SELECT count(*) FROM clocking_events c
+             JOIN race_entries e ON e.id=c.entry_id
+             WHERE e.race_id=:id AND e.status='registered'
+               AND c.method='RFID' AND c.metadata->>'timestamp_trusted'='false') AS untrusted_rfid_timestamps,
+            (SELECT count(*) FROM clocking_events c
+             JOIN race_entries e ON e.id=c.entry_id
+             WHERE e.race_id=:id AND e.status='registered'
+               AND c.method='QR'
+               AND NOT EXISTS (
+                   SELECT 1 FROM guest_arrival_verifications gv
+                   WHERE gv.event_id=c.id AND gv.decision='confirmed'
+               )) AS qr_events_without_confirmation,
+            (SELECT count(*) FROM clocking_events c
+             JOIN race_entries e ON e.id=c.entry_id
+             WHERE e.race_id=:id AND e.status='registered'
+               AND c.method='RFID'
+               AND (c.device_id IS NULL
+                    OR c.metadata->>'capture_mode' IS DISTINCT FROM 'automatic'
+                    OR c.metadata->>'simulated' IS DISTINCT FROM 'false'
+                    OR c.metadata->>'timestamp_trusted' IS DISTINCT FROM 'true')
+            ) AS rfid_events_without_certified_provenance,
+            (SELECT count(*) FROM clocking_events c JOIN race_entries e ON e.id=c.entry_id
+             WHERE e.race_id=:id AND e.status='registered' AND c.method='RFID'
+               AND (c.metadata->>'offline_buffered'='true'
+                    OR c.metadata->>'device_recorded_at' IS NOT NULL)
+            ) AS rfid_events_with_device_time_claims
+    """), {"id": race_id}).mappings().one()
+    readiness = finalization_readiness(status)
+    # Diagnostic flags are not proof of trust. In particular, a zero count
+    # does not certify a reader, clock, event, or result.
+    diagnostics = {
+        "simulated_arrivals_present": evidence["simulated_events"] > 0,
+        "untrusted_rfid_timestamps_present": evidence["untrusted_rfid_timestamps"] > 0,
+        "qr_without_physical_confirmation_present": evidence["qr_events_without_confirmation"] > 0,
+        "validation_blockers_present": evidence["blocked_events"] > 0,
+        "rfid_without_certified_provenance_present": evidence["rfid_events_without_certified_provenance"] > 0,
+        "rfid_device_time_claims_present": evidence["rfid_events_with_device_time_claims"] > 0,
+    }
+    return {"race_id": race_id, **readiness,
+            "evidence_summary": dict(evidence),
+            "evidence_diagnostics": diagnostics,
+            "evidence_summary_official": False}
